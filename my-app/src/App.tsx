@@ -3,19 +3,25 @@ import { BottomNav } from './components/BottomNav'
 import { AppToast } from './components/AppToast'
 import { orders, products } from './data/mockData'
 import { AccountScreen } from './screens/AccountScreen'
+import { AuthScreen } from './screens/AuthScreen'
 import { CartScreen } from './screens/CartScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { OrdersScreen } from './screens/OrdersScreen'
 import { ProductDetailsScreen } from './screens/ProductDetailsScreen'
 import type { CartItem, Order, Product, Screen } from './types/app'
+import { getBackendOrders, getBackendProducts } from './services/backendApi'
 import { matchOrderToProduct } from './utils/orders'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('home')
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products)
+  const [orderHistory, setOrderHistory] = useState<Order[]>(orders)
   const [selectedProduct, setSelectedProduct] = useState<Product>(products[0])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('All Items')
   const [showAllItems, setShowAllItems] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const [addresses] = useState<string[]>([
@@ -34,10 +40,33 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadBackendData() {
+      const [backendProducts, backendOrders] = await Promise.all([getBackendProducts(), getBackendOrders()])
+
+      if (!isMounted) return
+      setCatalogProducts(backendProducts)
+      setOrderHistory(backendOrders)
+      if (backendProducts.length > 0) {
+        setSelectedProduct(backendProducts[0])
+      }
+    }
+
+    loadBackendData().catch(() => {
+      setToast('Unable to load backend data. Showing local catalog.')
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const cartCount = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
 
   const visibleProducts = useMemo(() => {
-    const filtered = products.filter((product) => {
+    const filtered = catalogProducts.filter((product) => {
       const matchCategory =
         selectedCategory === 'All Items' || product.category.toLowerCase() === selectedCategory.toLowerCase()
       const term = searchQuery.trim().toLowerCase()
@@ -49,7 +78,7 @@ function App() {
     })
     if (showAllItems) return filtered
     return filtered.slice(0, 4)
-  }, [searchQuery, selectedCategory, showAllItems])
+  }, [catalogProducts, searchQuery, selectedCategory, showAllItems])
 
   function addToCart(product: Product, quantity = 1) {
     setCartItems((current) => {
@@ -80,6 +109,11 @@ function App() {
     setScreen('product')
   }
 
+  function navigateFromMenu(target: 'home' | 'orders' | 'cart' | 'account') {
+    setScreen(target)
+    setIsMenuOpen(false)
+  }
+
   function handleBuyNow(product: Product, quantity: number) {
     addToCart(product, quantity)
     setScreen('cart')
@@ -87,7 +121,7 @@ function App() {
   }
 
   function handleQuickAddFromOrder(order: Order) {
-    const match = matchOrderToProduct(order, products)
+    const match = matchOrderToProduct(order, catalogProducts)
     if (!match) return
     addToCart(match, 1)
     setScreen('cart')
@@ -100,7 +134,6 @@ function App() {
           products={visibleProducts}
           category={selectedCategory}
           query={searchQuery}
-          cartCount={cartCount}
           onCategoryChange={(category) => {
             setSelectedCategory(category)
             setShowAllItems(false)
@@ -109,8 +142,11 @@ function App() {
           onViewAll={() => setShowAllItems(true)}
           onOpenProduct={openProduct}
           onAddToCart={(product) => addToCart(product, 1)}
-          onOpenCart={() => setScreen('cart')}
           onNotify={setToast}
+          isMenuOpen={isMenuOpen}
+          onToggleMenu={() => setIsMenuOpen((prev) => !prev)}
+          onCloseMenu={() => setIsMenuOpen(false)}
+          onNavigateMenu={navigateFromMenu}
         />
       )
     }
@@ -130,7 +166,7 @@ function App() {
     if (screen === 'orders') {
       return (
         <OrdersScreen
-          orders={orders}
+          orders={orderHistory}
           onBackHome={() => setScreen('home')}
           onTrackOrder={(order) => setToast(`Tracking started for Order #${order.id}`)}
           onViewDetails={(order) => setToast(`Viewing details for Order #${order.id}`)}
@@ -178,8 +214,14 @@ function App() {
 
   return (
     <div className="app-shell">
-      <div className="phone-frame">{renderScreen()}</div>
-      <BottomNav screen={screen} cartCount={cartCount} onChange={setScreen} />
+      {!isAuthenticated ? (
+        <AuthScreen onAuthenticated={() => setIsAuthenticated(true)} />
+      ) : (
+        <>
+          <div className="phone-frame">{renderScreen()}</div>
+          <BottomNav screen={screen} cartCount={cartCount} onChange={setScreen} />
+        </>
+      )}
       <AppToast message={toast} />
     </div>
   )

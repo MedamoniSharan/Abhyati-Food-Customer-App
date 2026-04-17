@@ -34,7 +34,7 @@ export function AccountScreen({ onNavigateOrders, onOpenAddresses, onOpenPayment
 
       <main className="content">
         <section className="account-card">
-          <div className="avatar">MS</div>
+          <img src="/app-logo.png" alt="Abhyati food logo" className="avatar avatar-logo" />
           <div>
             <h3>Mahesh Sharan</h3>
             <p>Procurement Manager, Abhyati food Buyer</p>
