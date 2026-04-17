@@ -37,7 +37,7 @@ export function HomeScreen({
             <button type="button" className="icon-btn icon-btn-dark" onClick={() => onNotify('Menu coming soon')}>
               <span className="material-symbols-outlined">menu</span>
             </button>
-            <h1>PlatePro</h1>
+            <h1>Abhyati food</h1>
           </div>
           <div className="header-actions">
             <button

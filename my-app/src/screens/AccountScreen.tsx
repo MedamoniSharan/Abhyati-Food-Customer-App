@@ -37,7 +37,7 @@ export function AccountScreen({ onNavigateOrders, onOpenAddresses, onOpenPayment
           <div className="avatar">MS</div>
           <div>
             <h3>Mahesh Sharan</h3>
-            <p>Procurement Manager, PlatePro Buyer</p>
+            <p>Procurement Manager, Abhyati food Buyer</p>
           </div>
         </section>
 
