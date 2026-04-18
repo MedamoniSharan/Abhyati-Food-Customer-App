@@ -15,7 +15,9 @@ const envSchema = z.object({
   ZOHO_ORGANIZATION_ID: z.string().optional(),
 
   ZOHO_DEFAULT_CURRENCY_CODE: z.string().default('INR'),
-  ZOHO_DEFAULT_PAYMENT_TERMS: z.string().default('Due on Receipt')
+  ZOHO_DEFAULT_PAYMENT_TERMS: z.string().default('Due on Receipt'),
+  AUTH_DEFAULT_CUSTOMER_EMAIL: z.string().email().default('customer@abhyati.com'),
+  AUTH_DEFAULT_CUSTOMER_PASSWORD: z.string().min(6).default('Abhyati@123')
 })
 
 const parsed = envSchema.safeParse(process.env)

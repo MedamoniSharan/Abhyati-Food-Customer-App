@@ -215,7 +215,12 @@ function App() {
   return (
     <div className="app-shell">
       {!isAuthenticated ? (
-        <AuthScreen onAuthenticated={() => setIsAuthenticated(true)} />
+        <AuthScreen
+          onAuthenticated={(message) => {
+            setIsAuthenticated(true)
+            setToast(message)
+          }}
+        />
       ) : (
         <>
           <div className="phone-frame">{renderScreen()}</div>

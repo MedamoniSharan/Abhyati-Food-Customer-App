@@ -17,6 +17,12 @@ export function errorHandler(error, _req, res, _next) {
     })
   }
 
+  if (typeof error?.statusCode === 'number') {
+    return res.status(error.statusCode).json({
+      message: error.message || 'Request failed'
+    })
+  }
+
   return res.status(500).json({
     message: error.message || 'Internal server error'
   })

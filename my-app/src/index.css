@@ -1282,6 +1282,17 @@ body {
   font-weight: 600;
 }
 
+.auth-error-text {
+  margin: 0 0 8px;
+  color: #b91c1c;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.auth-primary-btn:disabled {
+  opacity: 0.75;
+}
+
 @media (min-width: 768px) {
   .cart-footer {
     max-width: 480px;

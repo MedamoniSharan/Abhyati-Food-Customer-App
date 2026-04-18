@@ -9,6 +9,20 @@ npm install
 npm run dev
 ```
 
+## Admin dashboard (separate React website)
+
+- Path: `admin-dashboard/`
+
+```bash
+cd admin-dashboard
+npm install
+npm run dev
+```
+
+Then open:
+
+`http://localhost:5173`
+
 ## Backend setup (Zoho Books)
 
 ```bash
