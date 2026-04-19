@@ -11,11 +11,12 @@ import { ProductDetailsScreen } from './screens/ProductDetailsScreen'
 import type { CartItem, Order, Product, Screen } from './types/app'
 import { fetchZohoItemsPage, getBackendOrders } from './services/backendApi'
 import { checkBackendReachable } from './utils/backendHealth'
+import { clearSignedIn, readSignedIn, writeSignedIn } from './utils/authSession'
 import { matchOrderToProduct } from './utils/orders'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('home')
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(readSignedIn)
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [orderHistory, setOrderHistory] = useState<Order[]>(orders)
   const [selectedProduct, setSelectedProduct] = useState<Product>(products[0])
@@ -271,6 +272,8 @@ function App() {
           return paymentMethods
         }}
         onLogout={() => {
+          clearSignedIn()
+          setIsAuthenticated(false)
           setCartItems([])
           setSearchQuery('')
           setSelectedCategory('All Items')
@@ -291,6 +294,7 @@ function App() {
       {!isAuthenticated ? (
         <AuthScreen
           onAuthenticated={(message) => {
+            writeSignedIn()
             setIsAuthenticated(true)
             setToast(message)
           }}

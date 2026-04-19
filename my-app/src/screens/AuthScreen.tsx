@@ -12,6 +12,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -79,22 +80,38 @@ export function AuthScreen({ onAuthenticated }: Props) {
           className="auth-input"
           placeholder="Email Address"
           type="email"
+          autoComplete="email"
+          inputMode="email"
           value={email}
           onChange={(event) => {
             resetFormError()
             setEmail(event.target.value)
           }}
         />
-        <input
-          className="auth-input"
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(event) => {
-            resetFormError()
-            setPassword(event.target.value)
-          }}
-        />
+        <div className="auth-password-field">
+          <input
+            className="auth-input"
+            placeholder="Password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete={view === 'signup' ? 'new-password' : 'current-password'}
+            value={password}
+            onChange={(event) => {
+              resetFormError()
+              setPassword(event.target.value)
+            }}
+          />
+          <button
+            type="button"
+            className="auth-password-toggle"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-pressed={showPassword}
+          >
+            <span className="material-symbols-outlined" aria-hidden>
+              {showPassword ? 'visibility_off' : 'visibility'}
+            </span>
+          </button>
+        </div>
 
         {error ? <p className="auth-error-text">{error}</p> : null}
 

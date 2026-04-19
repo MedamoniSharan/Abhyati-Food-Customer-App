@@ -1377,6 +1377,43 @@ body {
   border-color: #facc15;
 }
 
+.auth-password-field {
+  position: relative;
+  width: 100%;
+  margin: 0 0 10px;
+}
+
+.auth-password-field .auth-input {
+  margin: 0;
+  padding-right: 48px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  padding: 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.auth-password-toggle:hover {
+  color: #111827;
+  background: #f3f4f6;
+}
+
+.auth-password-toggle .material-symbols-outlined {
+  font-size: 22px;
+}
+
 .auth-form-card .auth-primary-btn {
   width: 100%;
   margin-top: 2px;
