@@ -85,7 +85,10 @@ export function HomeScreen({
           </div>
         </div>
         <div className="hero-copy">
-          <h2>Wholesale supplies delivered to restaurants &amp; dealers</h2>
+          <h2>
+            <span className="hero-title-line">Wholesale delivery</span>
+            <span className="hero-title-line">for restaurants &amp; dealers</span>
+          </h2>
         </div>
         <label className="search-bar">
           <span className="material-symbols-outlined">search</span>
