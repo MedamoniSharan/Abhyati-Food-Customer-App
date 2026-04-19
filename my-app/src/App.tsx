@@ -10,6 +10,7 @@ import { OrdersScreen } from './screens/OrdersScreen'
 import { ProductDetailsScreen } from './screens/ProductDetailsScreen'
 import type { CartItem, Order, Product, Screen } from './types/app'
 import { fetchZohoItemsPage, getBackendOrders } from './services/backendApi'
+import { checkBackendReachable } from './utils/backendHealth'
 import { matchOrderToProduct } from './utils/orders'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
   const [nextItemsPage, setNextItemsPage] = useState(1)
   const [hasMoreCatalogItems, setHasMoreCatalogItems] = useState(true)
   const [loadingCatalog, setLoadingCatalog] = useState(false)
+  const [backendReachable, setBackendReachable] = useState<boolean | null>(null)
   const catalogFetchLock = useRef(false)
   const [addresses] = useState<string[]>([
     'Office: 2nd Floor, Sector 62, Noida, Uttar Pradesh',
@@ -42,6 +44,16 @@ function App() {
     const timer = window.setTimeout(() => setToast(null), 2000)
     return () => window.clearTimeout(timer)
   }, [toast])
+
+  useEffect(() => {
+    let cancelled = false
+    void checkBackendReachable().then((ok) => {
+      if (!cancelled) setBackendReachable(ok)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const mergeDedupeProducts = useCallback((existing: Product[], incoming: Product[]) => {
     const seen = new Set(existing.map((p) => p.id))
@@ -271,6 +283,11 @@ function App() {
 
   return (
     <div className="app-shell">
+      {backendReachable === false ? (
+        <div className="api-offline-banner" role="status">
+          Cannot reach the server. Showing offline data where available. Check your connection or try again later.
+        </div>
+      ) : null}
       {!isAuthenticated ? (
         <AuthScreen
           onAuthenticated={(message) => {

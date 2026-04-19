@@ -10,16 +10,8 @@ import { seedDefaultUser } from './services/authStore.js'
 
 const app = express()
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || env.ALLOWED_ORIGINS.includes(origin)) {
-        return callback(null, true)
-      }
-      return callback(new Error(`Origin ${origin} is not allowed by CORS`))
-    }
-  })
-)
+// Capacitor / WebView clients send varied origins (e.g. capacitor://localhost); allow all for this API.
+app.use(cors({ origin: '*' }))
 
 app.use(express.json({ limit: '1mb' }))
 

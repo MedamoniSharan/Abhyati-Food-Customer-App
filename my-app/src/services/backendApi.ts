@@ -1,5 +1,5 @@
 import type { Order, Product } from '../types/app'
-import { getApiBaseCandidates } from '../config/apiBase'
+import { getApiBaseCandidates, logApiCandidatesOnce } from '../config/api'
 import { orders as mockOrders, products as mockProducts } from '../data/mockData'
 
 const API_BASE_URL_CANDIDATES = getApiBaseCandidates()
@@ -96,21 +96,26 @@ function mapZohoSalesOrderToOrder(order: ZohoSalesOrder, index: number): Order {
 }
 
 async function request<T>(path: string): Promise<T> {
+  logApiCandidatesOnce(API_BASE_URL_CANDIDATES)
   let lastError: unknown = null
 
   for (const baseUrl of API_BASE_URL_CANDIDATES) {
     try {
-      const response = await fetch(`${baseUrl}${path}`)
+      const url = `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
+      const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`)
       }
       return response.json() as Promise<T>
     } catch (error) {
       lastError = error
+      console.warn('[API] request failed', { baseUrl, path, error })
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error('Unable to reach backend API')
+  const err = lastError instanceof Error ? lastError : new Error('Unable to reach backend API')
+  console.error('[API] all bases failed', path, err)
+  throw err
 }
 
 const DEFAULT_ITEMS_PER_PAGE = 20

@@ -1,5 +1,5 @@
 import type { Product } from '../types/app'
-import { getApiBaseCandidates, PUBLIC_API_BASE_URL } from '../config/apiBase'
+import { getApiBaseCandidates, PUBLIC_API_BASE_URL } from '../config/api'
 
 /** Shown when Zoho image fails or product has no image URL */
 export const FALLBACK_PRODUCT_IMAGE = '/app-logo.png'

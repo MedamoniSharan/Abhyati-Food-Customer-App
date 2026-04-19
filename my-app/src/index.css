@@ -39,6 +39,16 @@ body {
   background: #f6f6f8;
 }
 
+.api-offline-banner {
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #7f1d1d;
+  background: #fee2e2;
+  border-bottom: 1px solid #fecaca;
+  text-align: center;
+}
+
 .phone-frame {
   min-height: calc(100dvh - 72px - env(safe-area-inset-bottom));
   padding-bottom: 94px;
