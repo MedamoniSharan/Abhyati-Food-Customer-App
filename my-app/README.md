@@ -34,6 +34,10 @@ npm run dev
 
 Backend runs at `http://localhost:4000` by default.
 
+### Test customer login (seeded on first backend start)
+
+After `npm run dev` in `backend/`, a default customer is created if missing (see `AUTH_DEFAULT_*` in `.env.example`). **Delivery driver** sign-in in the app does not call the API: use **Driver sign in** and tap **Log In** (email/password fields are optional for local UI demo).
+
 ### Required backend env values
 
 - `ZOHO_CLIENT_ID`
@@ -170,19 +174,31 @@ Base URL (local): `http://localhost:3001`
 - `per_page` (max 200)
 - `search_text` (module support varies in Zoho)
 
+## Google Maps (delivery driver)
+
+Driver maps use the **Maps Embed API**. Set `VITE_GOOGLE_MAPS_API_KEY` in `my-app/.env` (see `my-app/.env.example`) and enable **Maps Embed API** for that key in Google Cloud. The app requests **browser geolocation** when available; with a key it shows **directions** from your position to the stop address, otherwise **place** mode for the destination only. With no key, users still get **Open in Google Maps** (native app) with the same destination and optional `origin` from geolocation.
+
 ## Capacitor builds
 
 ### Android
 
+Gradle needs **JDK 21 or newer** (the default `java` on some machines is 17 and will fail with `invalid source release: 21`). Point `JAVA_HOME` at your install, then build from the repo root:
+
 ```bash
-npm run build
-npx cap sync android
-cd android
-./gradlew assembleDebug
+export JAVA_HOME=/Users/m.sharan/Library/Java/JavaVirtualMachines/openjdk-23.0.1/Contents/Home
+cd my-app && npm run build && npx cap sync android && cd android && ./gradlew assembleDebug
+```
+
+If you are already inside `my-app/`, use:
+
+```bash
+export JAVA_HOME=/Users/m.sharan/Library/Java/JavaVirtualMachines/openjdk-23.0.1/Contents/Home
+npm run build && npx cap sync android && cd android && ./gradlew assembleDebug
 ```
 
 Debug APK:
-`android/app/build/outputs/apk/debug/app-debug.apk`
+
+`my-app/android/app/build/outputs/apk/debug/Abhyati-food-debug.apk` (from repo root), or `android/app/build/outputs/apk/debug/Abhyati-food-debug.apk` when your current directory is `my-app/`.
 
 ### iOS
 

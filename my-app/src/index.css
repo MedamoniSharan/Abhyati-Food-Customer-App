@@ -1711,6 +1711,38 @@ body[data-toast-layout='main'] .app-toast-host {
   padding: 0 26px;
 }
 
+.auth-welcome-hint {
+  margin: 0 0 14px;
+  font-size: 0.86rem;
+  color: #9ca3af;
+}
+
+.auth-welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.auth-secondary-btn {
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font-weight: 700;
+  min-height: 46px;
+  padding: 0 22px;
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+
+.auth-secondary-btn:hover {
+  border-color: #facc15;
+  color: #facc15;
+}
+
 .auth-form-shell {
   align-items: center;
 }
