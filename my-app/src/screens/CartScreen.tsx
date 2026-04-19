@@ -25,7 +25,7 @@ export function CartScreen({ cartItems, onBackHome, onIncrease, onDecrease, onCh
         </div>
       </header>
 
-      <main className="content orders-content">
+      <main className={`content orders-content${cartItems.length > 0 ? ' cart-scroll-clear-footer' : ''}`}>
         {cartItems.length === 0 ? (
           <div className="empty-state">
             <h3>Your cart is empty</h3>

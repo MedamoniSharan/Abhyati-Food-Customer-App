@@ -58,6 +58,36 @@ export function zohoItemToSpecRows(item: Record<string, unknown>): ZohoSpecRow[]
   return rows
 }
 
+/**
+ * Total orderable quantity from Zoho (sum of location stock or stock_on_hand).
+ * Returns null when stock is not reported (no cap applied in UI).
+ */
+export function zohoAvailableStockQuantity(item: Record<string, unknown> | null): number | null {
+  if (!item) return null
+  const locations = item.locations
+  if (Array.isArray(locations) && locations.length > 0) {
+    let sum = 0
+    let counted = false
+    for (const loc of locations) {
+      if (!loc || typeof loc !== 'object') continue
+      const o = loc as Record<string, unknown>
+      const raw = o.location_stock_on_hand ?? o.location_available_stock ?? o.location_actual_available_stock
+      const n = Number(raw)
+      if (Number.isFinite(n) && n >= 0) {
+        sum += n
+        counted = true
+      }
+    }
+    if (counted) return Math.floor(sum)
+  }
+  const hand = item.stock_on_hand ?? item.available_stock
+  if (hand != null && String(hand).trim() !== '') {
+    const n = Number(hand)
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n)
+  }
+  return null
+}
+
 /** Human-readable stock line from Zoho item. */
 export function zohoStockLine(item: Record<string, unknown>): string {
   const locations = item.locations

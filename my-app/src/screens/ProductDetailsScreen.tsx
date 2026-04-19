@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CatalogLoader } from '../components/CatalogLoader'
 import { ProductImage } from '../components/ProductImage'
+import { useToast } from '../contexts/ToastContext'
 import type { Product } from '../types/app'
 import { fetchZohoItemDetail } from '../services/backendApi'
 import { formatInr } from '../utils/currency'
 import {
+  zohoAvailableStockQuantity,
   zohoItemToSpecRows,
   zohoMinOrderQuantity,
   zohoRateInr,
@@ -28,7 +31,20 @@ function fallbackSpecRows(product: Product): ZohoSpecRow[] {
   return rows
 }
 
+function ProductDetailPageSkeleton() {
+  return (
+    <div className="product-detail-skeleton-wrap" aria-hidden>
+      <div className="product-skeleton-shimmer product-detail-skel-hero" />
+      <div className="product-skeleton-shimmer product-detail-skel-line title" />
+      <div className="product-skeleton-shimmer product-detail-skel-line short" />
+      <div className="product-skeleton-shimmer product-detail-skel-card" />
+      <div className="product-skeleton-shimmer product-detail-skel-card" />
+    </div>
+  )
+}
+
 export function ProductDetailsScreen({ product, onBack, onOpenCart, onAddToCart, onBuyNow }: Props) {
+  const { showToast } = useToast()
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
   const [detailLoading, setDetailLoading] = useState(Boolean(product.zohoItemId))
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -58,9 +74,21 @@ export function ProductDetailsScreen({ product, onBack, onOpenCart, onAddToCart,
 
   const minOrder = useMemo(() => zohoMinOrderQuantity(detail), [detail])
 
+  const stockCap = useMemo(() => {
+    if (detail) return zohoAvailableStockQuantity(detail)
+    if (product.availableStock != null) return product.availableStock
+    return null
+  }, [detail, product.availableStock])
+
+  const stockInsufficientForMin = stockCap != null && stockCap < minOrder
+
   useEffect(() => {
-    setQuantity((q) => Math.max(minOrder, q))
-  }, [minOrder])
+    setQuantity((q) => {
+      let n = Math.max(minOrder, q)
+      if (stockCap != null) n = Math.min(n, stockCap)
+      return n
+    })
+  }, [minOrder, stockCap])
 
   const displayName =
     detail && detail.name != null && String(detail.name).trim()
@@ -88,8 +116,27 @@ export function ProductDetailsScreen({ product, onBack, onOpenCart, onAddToCart,
       name: displayName,
       priceInr: displayRate,
       subtitle: desc,
+      ...(stockCap != null ? { availableStock: stockCap } : {}),
     }
-  }, [product, displayName, displayRate, detail])
+  }, [product, displayName, displayRate, detail, stockCap])
+
+  function bumpQuantity(delta: 1 | -1) {
+    if (stockInsufficientForMin) return
+    setQuantity((q) => {
+      const next = q + delta
+      if (delta > 0 && stockCap != null && next > stockCap) {
+        showToast(
+          `Available stock is ${stockCap} ${unitLabel}. You can only order up to that amount.`,
+          { variant: 'warning' },
+        )
+        return q
+      }
+      if (delta < 0) return Math.max(minOrder, next)
+      return next
+    })
+  }
+
+  const showBootstrapLoader = detailLoading && Boolean(product.zohoItemId)
 
   return (
     <>
@@ -105,84 +152,111 @@ export function ProductDetailsScreen({ product, onBack, onOpenCart, onAddToCart,
         </div>
       </header>
 
-      <main className="content product-content">
-        <section className="gallery">
-          <div className="hero-image">
-            <ProductImage product={product} />
-            {product.badge ? (
-              <span className={`hero-tag hero-tag-${product.badge.tone}`}>{product.badge.label}</span>
+      {showBootstrapLoader ? (
+        <main className="content product-content product-detail-loading-main">
+          <CatalogLoader label="Loading product details…" />
+          <ProductDetailPageSkeleton />
+        </main>
+      ) : (
+        <main className="content product-content">
+          <section className="gallery">
+            <div className="hero-image">
+              <ProductImage product={product} />
+              {product.badge ? (
+                <span className={`hero-tag hero-tag-${product.badge.tone}`}>{product.badge.label}</span>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="product-heading">
+            <h2>{displayName}</h2>
+            <div className="unit-price">
+              <strong>{formatInr(displayRate)}</strong>
+              <span> / {unitLabel}</span>
+            </div>
+            <p className="stock">
+              {detailError ? detailError : stockLine}
+            </p>
+          </section>
+
+          <section className="details-card">
+            <p className="label">Bulk Quantity ({unitLabel})</p>
+            <div className="quantity-row">
+              <div className="quantity-box">
+                <button
+                  type="button"
+                  className="counter-btn"
+                  disabled={stockInsufficientForMin || quantity <= minOrder}
+                  onClick={() => bumpQuantity(-1)}
+                >
+                  <span className="material-symbols-outlined">remove</span>
+                </button>
+                <span>{quantity}</span>
+                <button
+                  type="button"
+                  className="counter-btn"
+                  disabled={stockInsufficientForMin}
+                  onClick={() => bumpQuantity(1)}
+                >
+                  <span className="material-symbols-outlined">add</span>
+                </button>
+              </div>
+              <div className="total-wrap">
+                <small>Total Price</small>
+                <strong>{formatInr(total)}</strong>
+              </div>
+            </div>
+            <p className="min-order">
+              Min. order: {minOrder} {unitLabel}
+            </p>
+            {stockInsufficientForMin ? (
+              <p className="stock-cap-warning" role="alert">
+                Available stock ({stockCap} {unitLabel}) is below the minimum order. This item cannot be ordered
+                right now.
+              </p>
+            ) : stockCap != null ? (
+              <p className="stock-cap-hint">You can order up to {stockCap} {unitLabel} (available stock).</p>
             ) : null}
-          </div>
-        </section>
+          </section>
 
-        <section className="product-heading">
-          <h2>{displayName}</h2>
-          <div className="unit-price">
-            <strong>{formatInr(displayRate)}</strong>
-            <span> / {unitLabel}</span>
-          </div>
-          <p className="stock">
-            {detailLoading && product.zohoItemId ? 'Loading stock…' : detailError ? detailError : stockLine}
-          </p>
-        </section>
+          <section className="details-card">
+            <h3>Specifications</h3>
+            {specRows.length === 0 ? (
+              <p className="product-detail-placeholder">No specifications listed for this item.</p>
+            ) : (
+              <div className="spec-grid">
+                {specRows.map((row, index) => (
+                  <div key={`${index}-${row.label}`}>
+                    <small>{row.label}</small>
+                    <p className={row.label === 'Description' ? 'spec-value-multiline' : undefined}>{row.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
-        <section className="details-card">
-          <p className="label">Bulk Quantity ({unitLabel})</p>
-          <div className="quantity-row">
-            <div className="quantity-box">
-              <button
-                type="button"
-                className="counter-btn"
-                disabled={quantity <= minOrder}
-                onClick={() => setQuantity((q) => Math.max(minOrder, q - 1))}
-              >
-                <span className="material-symbols-outlined">remove</span>
-              </button>
-              <span>{quantity}</span>
-              <button type="button" className="counter-btn" onClick={() => setQuantity((q) => q + 1)}>
-                <span className="material-symbols-outlined">add</span>
-              </button>
-            </div>
-            <div className="total-wrap">
-              <small>Total Price</small>
-              <strong>{formatInr(total)}</strong>
-            </div>
-          </div>
-          <p className="min-order">
-            Min. order: {minOrder} {unitLabel}
-            {detailLoading ? ' · checking catalog…' : ''}
-          </p>
-        </section>
-
-        <section className="details-card">
-          <h3>Specifications</h3>
-          {detailLoading && product.zohoItemId ? (
-            <p className="product-detail-placeholder">Loading specifications…</p>
-          ) : specRows.length === 0 ? (
-            <p className="product-detail-placeholder">No specifications listed for this item.</p>
-          ) : (
-            <div className="spec-grid">
-              {specRows.map((row, index) => (
-                <div key={`${index}-${row.label}`}>
-                  <small>{row.label}</small>
-                  <p className={row.label === 'Description' ? 'spec-value-multiline' : undefined}>{row.value}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
-
-      <div className="bottom-action-bar">
-        <button type="button" className="btn btn-outline" onClick={() => onAddToCart(productForCart, quantity)}>
-          <span className="material-symbols-outlined">add_shopping_cart</span>
-          Add to Cart
-        </button>
-        <button type="button" className="btn btn-accent" onClick={() => onBuyNow(productForCart, quantity)}>
-          <span className="material-symbols-outlined">bolt</span>
-          Buy Now
-        </button>
-      </div>
+          <section className="product-actions" aria-label="Purchase">
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={stockInsufficientForMin}
+              onClick={() => onAddToCart(productForCart, quantity)}
+            >
+              <span className="material-symbols-outlined">add_shopping_cart</span>
+              Add to Cart
+            </button>
+            <button
+              type="button"
+              className="btn btn-accent"
+              disabled={stockInsufficientForMin}
+              onClick={() => onBuyNow(productForCart, quantity)}
+            >
+              <span className="material-symbols-outlined">bolt</span>
+              Buy Now
+            </button>
+          </section>
+        </main>
+      )}
     </>
   )
 }

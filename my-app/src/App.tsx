@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
-import { AppToast } from './components/AppToast'
+import { useToast } from './contexts/ToastContext'
 import { orders, products } from './data/mockData'
 import { AccountScreen } from './screens/AccountScreen'
 import { AuthScreen } from './screens/AuthScreen'
@@ -15,6 +15,7 @@ import { clearSignedIn, readSignedIn, writeSignedIn } from './utils/authSession'
 import { matchOrderToProduct } from './utils/orders'
 
 function App() {
+  const { showToast } = useToast()
   const [screen, setScreen] = useState<Screen>('home')
   const [isAuthenticated, setIsAuthenticated] = useState(readSignedIn)
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
@@ -24,7 +25,6 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All Items')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
-  const [toast, setToast] = useState<string | null>(null)
   const [nextItemsPage, setNextItemsPage] = useState(1)
   const [hasMoreCatalogItems, setHasMoreCatalogItems] = useState(true)
   const [loadingCatalog, setLoadingCatalog] = useState(true)
@@ -41,10 +41,8 @@ function App() {
   ])
 
   useEffect(() => {
-    if (!toast) return
-    const timer = window.setTimeout(() => setToast(null), 2000)
-    return () => window.clearTimeout(timer)
-  }, [toast])
+    document.body.dataset.toastLayout = isAuthenticated ? 'main' : 'auth'
+  }, [isAuthenticated])
 
   useEffect(() => {
     let cancelled = false
@@ -87,12 +85,12 @@ function App() {
       setHasMoreCatalogItems(hasMore)
       setNextItemsPage(page + 1)
     } catch {
-      setToast('Unable to load products. Try again.')
+      showToast('Unable to load products. Try again.', { variant: 'error' })
     } finally {
       catalogFetchLock.current = false
       setLoadingCatalog(false)
     }
-  }, [hasMoreCatalogItems, mergeDedupeProducts, nextItemsPage])
+  }, [hasMoreCatalogItems, mergeDedupeProducts, nextItemsPage, showToast])
 
   useEffect(() => {
     let cancelled = false
@@ -112,7 +110,7 @@ function App() {
         setOrderHistory(backendOrders)
       } catch {
         if (!cancelled) {
-          setToast('Unable to load backend data. Showing local catalog.')
+          showToast('Unable to load backend data. Showing local catalog.', { variant: 'warning' })
           setCatalogProducts(products)
           setSelectedProduct(products[0])
           setHasMoreCatalogItems(false)
@@ -127,7 +125,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [mergeDedupeProducts])
+  }, [mergeDedupeProducts, showToast])
 
   const loadMoreCatalogIfNeeded = useCallback(() => {
     if (!hasMoreCatalogItems) return
@@ -152,18 +150,43 @@ function App() {
   }, [catalogProducts, searchQuery, selectedCategory])
 
   function addToCart(product: Product, quantity = 1) {
+    const cap = product.availableStock
+    if (cap != null) {
+      const existing = cartItems.find((item) => item.product.id === product.id)
+      const nextTotal = (existing?.quantity ?? 0) + quantity
+      if (nextTotal > cap) {
+        showToast(
+          `Available stock is ${cap}. You can only order up to that amount.`,
+          { variant: 'warning' },
+        )
+        return
+      }
+    }
     setCartItems((current) => {
       const itemIndex = current.findIndex((item) => item.product.id === product.id)
       if (itemIndex === -1) return [...current, { product, quantity }]
 
       return current.map((item, index) =>
-        index === itemIndex ? { ...item, quantity: item.quantity + quantity } : item,
+        index === itemIndex
+          ? {
+              ...item,
+              product: { ...item.product, ...product },
+              quantity: item.quantity + quantity,
+            }
+          : item,
       )
     })
-    setToast(`${product.name} added to cart`)
+    showToast(`${product.name} added to cart`, { variant: 'success' })
   }
 
   function updateCartQuantity(productId: string | number, type: 'increase' | 'decrease') {
+    const line = cartItems.find((item) => item.product.id === productId)
+    if (!line) return
+    const cap = line.product.availableStock
+    if (type === 'increase' && cap != null && line.quantity + 1 > cap) {
+      showToast(`Available stock is ${cap}. You can only order up to that amount.`, { variant: 'warning' })
+      return
+    }
     setCartItems((current) =>
       current
         .map((item) => {
@@ -188,7 +211,7 @@ function App() {
   function handleBuyNow(product: Product, quantity: number) {
     addToCart(product, quantity)
     setScreen('cart')
-    setToast('Proceeding to checkout')
+    showToast('Proceeding to checkout', { variant: 'info' })
   }
 
   function handleQuickAddFromOrder(order: Order) {
@@ -209,7 +232,7 @@ function App() {
           onQueryChange={setSearchQuery}
           onOpenProduct={openProduct}
           onAddToCart={(product) => addToCart(product, 1)}
-          onNotify={setToast}
+          onNotify={(msg) => showToast(msg, { variant: 'info' })}
           isMenuOpen={isMenuOpen}
           onToggleMenu={() => setIsMenuOpen((prev) => !prev)}
           onCloseMenu={() => setIsMenuOpen(false)}
@@ -239,9 +262,15 @@ function App() {
         <OrdersScreen
           orders={orderHistory}
           onBackHome={() => setScreen('home')}
-          onTrackOrder={(order) => setToast(`Tracking started for Order #${order.id}`)}
-          onViewDetails={(order) => setToast(`Viewing details for Order #${order.id}`)}
-          onInvoice={(order) => setToast(`Invoice downloaded for Order #${order.id}`)}
+          onTrackOrder={(order) =>
+            showToast(`Tracking started for Order #${order.id}`, { variant: 'info' })
+          }
+          onViewDetails={(order) =>
+            showToast(`Viewing details for Order #${order.id}`, { variant: 'info' })
+          }
+          onInvoice={(order) =>
+            showToast(`Invoice downloaded for Order #${order.id}`, { variant: 'success' })
+          }
           onReorder={(order) => handleQuickAddFromOrder(order)}
           onQuickAddFromOrder={handleQuickAddFromOrder}
         />
@@ -255,7 +284,9 @@ function App() {
           onBackHome={() => setScreen('home')}
           onIncrease={(productId) => updateCartQuantity(productId, 'increase')}
           onDecrease={(productId) => updateCartQuantity(productId, 'decrease')}
-          onCheckout={() => setToast('Checkout flow connected. Ready for payment integration.')}
+          onCheckout={() =>
+            showToast('Checkout flow connected. Ready for payment integration.', { variant: 'info' })
+          }
         />
       )
     }
@@ -264,11 +295,11 @@ function App() {
       <AccountScreen
         onNavigateOrders={() => setScreen('orders')}
         onOpenAddresses={() => {
-          setToast('Loaded saved delivery addresses')
+          showToast('Loaded saved delivery addresses', { variant: 'success' })
           return addresses
         }}
         onOpenPayments={() => {
-          setToast('Loaded saved payment methods')
+          showToast('Loaded saved payment methods', { variant: 'success' })
           return paymentMethods
         }}
         onLogout={() => {
@@ -278,7 +309,7 @@ function App() {
           setSearchQuery('')
           setSelectedCategory('All Items')
           setScreen('home')
-          setToast('Logged out successfully')
+          showToast('Logged out successfully', { variant: 'success' })
         }}
       />
     )
@@ -296,7 +327,7 @@ function App() {
           onAuthenticated={(message) => {
             writeSignedIn()
             setIsAuthenticated(true)
-            setToast(message)
+            showToast(message, { variant: 'success' })
           }}
         />
       ) : (
@@ -305,7 +336,6 @@ function App() {
           <BottomNav screen={screen} cartCount={cartCount} onChange={setScreen} />
         </>
       )}
-      <AppToast message={toast} />
     </div>
   )
 }

@@ -12,6 +12,8 @@ export type Product = {
   image: string
   badge?: { label: string; tone: 'green' | 'red' }
   category: 'Eco-Friendly' | 'Party Packs' | 'Bamboo' | 'Heavy Duty' | 'Premium'
+  /** Zoho available units; when set, cart / quantity must not exceed this. */
+  availableStock?: number
 }
 
 export type OrderStatus = 'Shipped' | 'Processing' | 'Delivered'

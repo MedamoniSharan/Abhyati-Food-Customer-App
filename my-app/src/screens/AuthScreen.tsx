@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useToast } from '../contexts/ToastContext'
 import { loginCustomer, signupCustomer } from '../services/authApi'
 
 type AuthView = 'welcome' | 'login' | 'signup'
@@ -8,21 +9,16 @@ type Props = {
 }
 
 export function AuthScreen({ onAuthenticated }: Props) {
+  const { showToast } = useToast()
   const [view, setView] = useState<AuthView>('welcome')
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-
-  function resetFormError() {
-    if (error) setError(null)
-  }
 
   async function submitAuth() {
     setLoading(true)
-    setError(null)
 
     try {
       if (view === 'signup') {
@@ -35,7 +31,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
       onAuthenticated(`Welcome back ${result.user.fullName}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Authentication failed'
-      setError(message)
+      showToast(message, { variant: 'error' })
     } finally {
       setLoading(false)
     }
@@ -70,10 +66,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
             className="auth-input"
             placeholder="Full Name"
             value={fullName}
-            onChange={(event) => {
-              resetFormError()
-              setFullName(event.target.value)
-            }}
+            onChange={(event) => setFullName(event.target.value)}
           />
         ) : null}
         <input
@@ -83,10 +76,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
           autoComplete="email"
           inputMode="email"
           value={email}
-          onChange={(event) => {
-            resetFormError()
-            setEmail(event.target.value)
-          }}
+          onChange={(event) => setEmail(event.target.value)}
         />
         <div className="auth-password-field">
           <input
@@ -95,10 +85,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
             type={showPassword ? 'text' : 'password'}
             autoComplete={view === 'signup' ? 'new-password' : 'current-password'}
             value={password}
-            onChange={(event) => {
-              resetFormError()
-              setPassword(event.target.value)
-            }}
+            onChange={(event) => setPassword(event.target.value)}
           />
           <button
             type="button"
@@ -113,8 +100,6 @@ export function AuthScreen({ onAuthenticated }: Props) {
           </button>
         </div>
 
-        {error ? <p className="auth-error-text">{error}</p> : null}
-
         <button type="button" className="auth-primary-btn" onClick={submitAuth} disabled={loading}>
           {loading ? 'Please wait...' : view === 'login' ? 'Log In' : 'Create Account'}
         </button>
@@ -122,10 +107,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
         <button
           type="button"
           className="auth-link-btn"
-          onClick={() => {
-            setError(null)
-            setView((prev) => (prev === 'login' ? 'signup' : 'login'))
-          }}
+          onClick={() => setView((prev) => (prev === 'login' ? 'signup' : 'login'))}
         >
           {view === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Log In'}
         </button>

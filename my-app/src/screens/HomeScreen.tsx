@@ -85,14 +85,14 @@ export function HomeScreen({
           </div>
         </div>
         <div className="hero-copy">
-          <h2>What you&apos;d like to eat for today?</h2>
+          <h2>Wholesale supplies delivered to restaurants &amp; dealers</h2>
         </div>
         <label className="search-bar">
           <span className="material-symbols-outlined">search</span>
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search menu, restaurant or craving"
+            placeholder="Search products, SKUs, or categories"
           />
           <button type="button" aria-label="Open filters" onClick={() => onNotify('Filter options coming soon')}>
             <span className="material-symbols-outlined">tune</span>

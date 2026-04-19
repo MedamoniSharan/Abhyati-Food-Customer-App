@@ -1,6 +1,7 @@
 import type { Order, Product } from '../types/app'
 import { getApiBaseCandidates, logApiCandidatesOnce } from '../config/api'
 import { orders as mockOrders, products as mockProducts } from '../data/mockData'
+import { zohoAvailableStockQuantity } from '../utils/productDetailFromZoho'
 
 const API_BASE_URL_CANDIDATES = getApiBaseCandidates()
 
@@ -54,6 +55,7 @@ function normalizePrice(value: unknown, fallback: number) {
 function mapZohoItemToProduct(item: ZohoItem, index: number): Product {
   const fallback = mockProducts[index % mockProducts.length]
   const itemId = item.item_id?.trim()
+  const avail = zohoAvailableStockQuantity(item as unknown as Record<string, unknown>)
   return {
     id: itemId ?? `zoho-${index}`,
     zohoItemId: itemId,
@@ -64,6 +66,7 @@ function mapZohoItemToProduct(item: ZohoItem, index: number): Product {
     image: fallback.image,
     badge: fallback.badge,
     category: fallback.category,
+    ...(avail != null ? { availableStock: avail } : {}),
   }
 }
 
