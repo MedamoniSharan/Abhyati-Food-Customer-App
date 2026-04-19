@@ -1,15 +1,20 @@
 import type { Order, Product } from '../types/app'
+import { getApiBaseCandidates } from '../config/apiBase'
 import { orders as mockOrders, products as mockProducts } from '../data/mockData'
 
-const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
-const API_BASE_URL_CANDIDATES = [configuredApiBaseUrl, 'http://localhost:3001', 'http://localhost:4000'].filter(
-  (value, index, arr) => value && arr.indexOf(value) === index,
-)
+const API_BASE_URL_CANDIDATES = getApiBaseCandidates()
+
+type ZohoPageContext = {
+  page?: number
+  per_page?: number
+  has_more_page?: boolean
+}
 
 type ZohoListResponse<T> = {
   message?: string
   code?: number
-  [key: string]: T[] | string | number | undefined
+  page_context?: ZohoPageContext
+  [key: string]: T[] | string | number | ZohoPageContext | undefined
 }
 
 type ZohoItem = {
@@ -19,6 +24,17 @@ type ZohoItem = {
   purchase_rate?: number
   description?: string
   image_document_id?: string
+  has_attachment?: boolean
+  image_name?: string
+}
+
+function zohoItemHasImage(item: ZohoItem): boolean {
+  const docId = item.image_document_id?.trim()
+  if (docId) return true
+  if (item.has_attachment === true) return true
+  const imageName = item.image_name?.trim()
+  if (imageName) return true
+  return false
 }
 
 type ZohoSalesOrder = {
@@ -37,8 +53,10 @@ function normalizePrice(value: unknown, fallback: number) {
 
 function mapZohoItemToProduct(item: ZohoItem, index: number): Product {
   const fallback = mockProducts[index % mockProducts.length]
+  const itemId = item.item_id?.trim()
   return {
-    id: Number(item.item_id) || 1000 + index,
+    id: itemId ?? `zoho-${index}`,
+    zohoItemId: itemId,
     name: item.name?.trim() || fallback.name,
     subtitle: item.description?.trim() || fallback.subtitle,
     priceInr: normalizePrice(item.rate ?? item.purchase_rate, fallback.priceInr),
@@ -95,15 +113,45 @@ async function request<T>(path: string): Promise<T> {
   throw lastError instanceof Error ? lastError : new Error('Unable to reach backend API')
 }
 
-export async function getBackendProducts(): Promise<Product[]> {
+const DEFAULT_ITEMS_PER_PAGE = 20
+
+export type ZohoItemsPageResult = {
+  products: Product[]
+  /** True when Zoho reports more pages available */
+  hasMore: boolean
+}
+
+/**
+ * Fetch one page of Zoho items (image-only). Caller appends results and calls again with page+1 while hasMore.
+ */
+export async function fetchZohoItemsPage(page: number, perPage = DEFAULT_ITEMS_PER_PAGE): Promise<ZohoItemsPageResult> {
   try {
-    const response = await request<ZohoListResponse<ZohoItem>>('/api/zoho/items?per_page=200')
+    const qs = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+    const response = await request<ZohoListResponse<ZohoItem>>(`/api/zoho/items?${qs.toString()}`)
     const items = (response.items as ZohoItem[] | undefined) || []
-    if (items.length === 0) return mockProducts
-    return items.map(mapZohoItemToProduct)
+    const withImages = items.filter(zohoItemHasImage)
+    const hasMore = Boolean(response.page_context?.has_more_page)
+    const baseIndex = (page - 1) * perPage
+
+    if (items.length === 0 && page === 1) {
+      return { products: mockProducts, hasMore: false }
+    }
+
+    if (withImages.length === 0) {
+      return { products: [], hasMore }
+    }
+
+    const products = withImages.map((item, i) => mapZohoItemToProduct(item, baseIndex + i))
+    return { products, hasMore }
   } catch {
-    return mockProducts
+    return page === 1 ? { products: mockProducts, hasMore: false } : { products: [], hasMore: false }
   }
+}
+
+/** @deprecated Prefer fetchZohoItemsPage with scroll pagination */
+export async function getBackendProducts(): Promise<Product[]> {
+  const { products } = await fetchZohoItemsPage(1, 200)
+  return products
 }
 
 export async function getBackendOrders(): Promise<Order[]> {

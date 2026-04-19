@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { getDefaultApiBase } from './apiBase'
 import { endpointGroups } from './endpoints'
 
 const endpointItems = endpointGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
@@ -28,7 +29,7 @@ function buildUrl(baseUrl, path, method, resourceId, queryParams) {
 }
 
 export default function App() {
-  const [baseUrl, setBaseUrl] = useState('http://localhost:3001')
+  const [baseUrl, setBaseUrl] = useState(getDefaultApiBase())
   const [search, setSearch] = useState('')
   const [activeEndpoint, setActiveEndpoint] = useState(endpointItems[0])
   const [selectedMethod, setSelectedMethod] = useState(endpointItems[0].methods[0])

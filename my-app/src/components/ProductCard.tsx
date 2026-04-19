@@ -1,4 +1,5 @@
 import type { Product } from '../types/app'
+import { ProductImage } from './ProductImage'
 import { formatInr } from '../utils/currency'
 
 type Props = {
@@ -11,7 +12,7 @@ export function ProductCard({ product, onOpenProduct, onAddToCart }: Props) {
   return (
     <article className="product-card">
       <button type="button" className="image-frame image-button" onClick={() => onOpenProduct(product)}>
-        <img src={product.image} alt={product.name} />
+        <ProductImage product={product} />
         {product.badge ? (
           <span className={`badge badge-${product.badge.tone}`}>{product.badge.label}</span>
         ) : null}

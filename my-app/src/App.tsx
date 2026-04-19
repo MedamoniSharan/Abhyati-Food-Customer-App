@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { AppToast } from './components/AppToast'
 import { orders, products } from './data/mockData'
@@ -9,21 +9,24 @@ import { HomeScreen } from './screens/HomeScreen'
 import { OrdersScreen } from './screens/OrdersScreen'
 import { ProductDetailsScreen } from './screens/ProductDetailsScreen'
 import type { CartItem, Order, Product, Screen } from './types/app'
-import { getBackendOrders, getBackendProducts } from './services/backendApi'
+import { fetchZohoItemsPage, getBackendOrders } from './services/backendApi'
 import { matchOrderToProduct } from './utils/orders'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('home')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products)
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [orderHistory, setOrderHistory] = useState<Order[]>(orders)
   const [selectedProduct, setSelectedProduct] = useState<Product>(products[0])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('All Items')
-  const [showAllItems, setShowAllItems] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [toast, setToast] = useState<string | null>(null)
+  const [nextItemsPage, setNextItemsPage] = useState(1)
+  const [hasMoreCatalogItems, setHasMoreCatalogItems] = useState(true)
+  const [loadingCatalog, setLoadingCatalog] = useState(false)
+  const catalogFetchLock = useRef(false)
   const [addresses] = useState<string[]>([
     'Office: 2nd Floor, Sector 62, Noida, Uttar Pradesh',
     'Warehouse: Plot 14, Bhiwandi, Maharashtra',
@@ -40,33 +43,90 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
-  useEffect(() => {
-    let isMounted = true
-
-    async function loadBackendData() {
-      const [backendProducts, backendOrders] = await Promise.all([getBackendProducts(), getBackendOrders()])
-
-      if (!isMounted) return
-      setCatalogProducts(backendProducts)
-      setOrderHistory(backendOrders)
-      if (backendProducts.length > 0) {
-        setSelectedProduct(backendProducts[0])
+  const mergeDedupeProducts = useCallback((existing: Product[], incoming: Product[]) => {
+    const seen = new Set(existing.map((p) => p.id))
+    const out = [...existing]
+    for (const p of incoming) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id)
+        out.push(p)
       }
     }
-
-    loadBackendData().catch(() => {
-      setToast('Unable to load backend data. Showing local catalog.')
-    })
-
-    return () => {
-      isMounted = false
-    }
+    return out
   }, [])
+
+  const loadCatalogPage = useCallback(async () => {
+    if (catalogFetchLock.current || !hasMoreCatalogItems) return
+    catalogFetchLock.current = true
+    setLoadingCatalog(true)
+    try {
+      const page = nextItemsPage
+      const { products, hasMore } = await fetchZohoItemsPage(page, 20)
+      setCatalogProducts((prev) => {
+        const merged = mergeDedupeProducts(prev, products)
+        if (merged.length > 0) {
+          setSelectedProduct((current) =>
+            merged.some((p) => p.id === current.id) ? current : merged[0],
+          )
+        }
+        return merged
+      })
+      setHasMoreCatalogItems(hasMore)
+      setNextItemsPage(page + 1)
+    } catch {
+      setToast('Unable to load products. Try again.')
+    } finally {
+      catalogFetchLock.current = false
+      setLoadingCatalog(false)
+    }
+  }, [hasMoreCatalogItems, mergeDedupeProducts, nextItemsPage])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      catalogFetchLock.current = true
+      setLoadingCatalog(true)
+      try {
+        const [firstPage, backendOrders] = await Promise.all([fetchZohoItemsPage(1, 20), getBackendOrders()])
+        if (cancelled) return
+        const merged = mergeDedupeProducts([], firstPage.products)
+        setCatalogProducts(merged)
+        if (merged.length > 0) {
+          setSelectedProduct(merged[0])
+        }
+        setHasMoreCatalogItems(firstPage.hasMore)
+        setNextItemsPage(2)
+        setOrderHistory(backendOrders)
+      } catch {
+        if (!cancelled) {
+          setToast('Unable to load backend data. Showing local catalog.')
+          setCatalogProducts(products)
+          setSelectedProduct(products[0])
+          setHasMoreCatalogItems(false)
+        }
+      } finally {
+        if (!cancelled) {
+          catalogFetchLock.current = false
+          setLoadingCatalog(false)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [mergeDedupeProducts])
+
+  const loadMoreCatalogIfNeeded = useCallback(() => {
+    if (!hasMoreCatalogItems) return
+    void loadCatalogPage()
+  }, [hasMoreCatalogItems, loadCatalogPage])
 
   const cartCount = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems])
 
   const visibleProducts = useMemo(() => {
-    const filtered = catalogProducts.filter((product) => {
+    const catalogHasZohoItems = catalogProducts.some((p) => p.zohoItemId)
+    return catalogProducts.filter((product) => {
+      if (catalogHasZohoItems && !product.zohoItemId) return false
       const matchCategory =
         selectedCategory === 'All Items' || product.category.toLowerCase() === selectedCategory.toLowerCase()
       const term = searchQuery.trim().toLowerCase()
@@ -76,9 +136,7 @@ function App() {
         product.subtitle.toLowerCase().includes(term)
       return matchCategory && matchQuery
     })
-    if (showAllItems) return filtered
-    return filtered.slice(0, 4)
-  }, [catalogProducts, searchQuery, selectedCategory, showAllItems])
+  }, [catalogProducts, searchQuery, selectedCategory])
 
   function addToCart(product: Product, quantity = 1) {
     setCartItems((current) => {
@@ -92,7 +150,7 @@ function App() {
     setToast(`${product.name} added to cart`)
   }
 
-  function updateCartQuantity(productId: number, type: 'increase' | 'decrease') {
+  function updateCartQuantity(productId: string | number, type: 'increase' | 'decrease') {
     setCartItems((current) =>
       current
         .map((item) => {
@@ -134,12 +192,8 @@ function App() {
           products={visibleProducts}
           category={selectedCategory}
           query={searchQuery}
-          onCategoryChange={(category) => {
-            setSelectedCategory(category)
-            setShowAllItems(false)
-          }}
+          onCategoryChange={setSelectedCategory}
           onQueryChange={setSearchQuery}
-          onViewAll={() => setShowAllItems(true)}
           onOpenProduct={openProduct}
           onAddToCart={(product) => addToCart(product, 1)}
           onNotify={setToast}
@@ -147,6 +201,10 @@ function App() {
           onToggleMenu={() => setIsMenuOpen((prev) => !prev)}
           onCloseMenu={() => setIsMenuOpen(false)}
           onNavigateMenu={navigateFromMenu}
+          hasMoreCatalog={hasMoreCatalogItems}
+          loadingMoreCatalog={loadingCatalog && catalogProducts.length > 0}
+          onLoadMoreCatalog={loadMoreCatalogIfNeeded}
+          catalogBootstrapping={loadingCatalog && catalogProducts.length === 0}
         />
       )
     }
@@ -204,7 +262,6 @@ function App() {
           setCartItems([])
           setSearchQuery('')
           setSelectedCategory('All Items')
-          setShowAllItems(false)
           setScreen('home')
           setToast('Logged out successfully')
         }}

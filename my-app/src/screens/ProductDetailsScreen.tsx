@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ProductImage } from '../components/ProductImage'
 import type { Product } from '../types/app'
 import { formatInr } from '../utils/currency'
 
@@ -31,7 +32,7 @@ export function ProductDetailsScreen({ product, onBack, onOpenCart, onAddToCart,
       <main className="content product-content">
         <section className="gallery">
           <div className="hero-image">
-            <img src={product.image} alt={product.name} />
+            <ProductImage product={product} />
             <span className="hero-tag">Best Seller</span>
           </div>
         </section>

@@ -1,13 +1,12 @@
+import { getApiBaseCandidates } from '../config/apiBase'
+
 export type AuthUser = {
   id: string
   fullName: string
   email: string
 }
 
-const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
-const API_BASE_URL_CANDIDATES = [configuredApiBaseUrl, 'http://localhost:3001', 'http://localhost:4000'].filter(
-  (value, index, arr) => value && arr.indexOf(value) === index,
-)
+const API_BASE_URL_CANDIDATES = getApiBaseCandidates()
 
 type AuthApiResponse = {
   message: string

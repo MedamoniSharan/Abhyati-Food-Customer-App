@@ -1,11 +1,12 @@
+import { ProductImage } from '../components/ProductImage'
 import type { CartItem } from '../types/app'
 import { formatInr } from '../utils/currency'
 
 type Props = {
   cartItems: CartItem[]
   onBackHome: () => void
-  onIncrease: (productId: number) => void
-  onDecrease: (productId: number) => void
+  onIncrease: (productId: string | number) => void
+  onDecrease: (productId: string | number) => void
   onCheckout: () => void
 }
 
@@ -35,7 +36,7 @@ export function CartScreen({ cartItems, onBackHome, onIncrease, onDecrease, onCh
         {cartItems.map((item) => (
           <article key={item.product.id} className="order-card">
             <div className="order-main">
-              <img src={item.product.image} alt={item.product.name} />
+              <ProductImage product={item.product} />
               <div className="order-body">
                 <h3>{item.product.name}</h3>
                 <p>{item.product.subtitle}</p>

@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react'
 import { categories } from '../data/mockData'
 import type { Product } from '../types/app'
 import { ProductCard } from '../components/ProductCard'
+import { ProductGridSkeleton } from '../components/ProductGridSkeleton'
 
 type Props = {
   products: Product[]
@@ -8,7 +10,6 @@ type Props = {
   query: string
   onCategoryChange: (category: string) => void
   onQueryChange: (value: string) => void
-  onViewAll: () => void
   onOpenProduct: (product: Product) => void
   onAddToCart: (product: Product) => void
   onNotify: (message: string) => void
@@ -16,6 +17,10 @@ type Props = {
   onToggleMenu: () => void
   onCloseMenu: () => void
   onNavigateMenu: (target: 'home' | 'orders' | 'cart' | 'account') => void
+  hasMoreCatalog: boolean
+  loadingMoreCatalog: boolean
+  onLoadMoreCatalog: () => void
+  catalogBootstrapping: boolean
 }
 
 export function HomeScreen({
@@ -24,7 +29,6 @@ export function HomeScreen({
   query,
   onCategoryChange,
   onQueryChange,
-  onViewAll,
   onOpenProduct,
   onAddToCart,
   onNotify,
@@ -32,7 +36,32 @@ export function HomeScreen({
   onToggleMenu,
   onCloseMenu,
   onNavigateMenu,
+  hasMoreCatalog,
+  loadingMoreCatalog,
+  onLoadMoreCatalog,
+  catalogBootstrapping,
 }: Props) {
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!hasMoreCatalog || catalogBootstrapping) return
+    const node = loadMoreSentinelRef.current
+    if (!node) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (entry?.isIntersecting && hasMoreCatalog && !loadingMoreCatalog) {
+          onLoadMoreCatalog()
+        }
+      },
+      { root: null, rootMargin: '120px', threshold: 0 },
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasMoreCatalog, loadingMoreCatalog, onLoadMoreCatalog, catalogBootstrapping])
+
   return (
     <>
       <header className="top-header home-header">
@@ -99,11 +128,8 @@ export function HomeScreen({
       </aside>
 
       <main className="content home-content">
-        <div className="section-header">
+        <div className="section-header section-header-single">
           <h2>Bulk Paper Products</h2>
-          <button type="button" className="link-btn" onClick={onViewAll}>
-            View All
-          </button>
         </div>
 
         <div className="category-row">
@@ -119,18 +145,28 @@ export function HomeScreen({
           ))}
         </div>
 
-        <section className="product-grid">
-          {products.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onOpenProduct={onOpenProduct}
-              onAddToCart={onAddToCart}
-            />
-          ))}
-        </section>
+        {catalogBootstrapping ? (
+          <ProductGridSkeleton variant="grid" />
+        ) : (
+          <section className="product-grid">
+            {products.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                onOpenProduct={onOpenProduct}
+                onAddToCart={onAddToCart}
+              />
+            ))}
+          </section>
+        )}
 
-        {products.length === 0 ? (
+        {hasMoreCatalog && !catalogBootstrapping ? (
+          <div ref={loadMoreSentinelRef} className="infinite-scroll-sentinel" aria-hidden />
+        ) : null}
+
+        {loadingMoreCatalog ? <ProductGridSkeleton variant="inline" count={2} /> : null}
+
+        {!catalogBootstrapping && products.length === 0 ? (
           <div className="empty-state">
             <h3>No products found</h3>
             <p>Try another keyword or category filter.</p>

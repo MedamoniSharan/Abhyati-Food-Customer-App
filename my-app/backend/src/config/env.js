@@ -13,6 +13,8 @@ const envSchema = z.object({
   ZOHO_REFRESH_TOKEN: z.string().min(1),
   ZOHO_REGION: z.enum(['in', 'com', 'eu', 'com.au', 'jp', 'com.cn']).default('in'),
   ZOHO_ORGANIZATION_ID: z.string().optional(),
+  /** Optional static access token (dev only). Prefer refresh-token flow via ZOHO_REFRESH_TOKEN. */
+  ZOHO_ACCESS_TOKEN: z.string().optional(),
 
   ZOHO_DEFAULT_CURRENCY_CODE: z.string().default('INR'),
   ZOHO_DEFAULT_PAYMENT_TERMS: z.string().default('Due on Receipt'),

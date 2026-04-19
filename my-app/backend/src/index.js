@@ -4,6 +4,7 @@ import { authRoutes } from './routes/authRoutes.js'
 import { env } from './config/env.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { healthRoutes } from './routes/healthRoutes.js'
+import { itemImageRoutes } from './routes/itemImageRoutes.js'
 import { zohoRoutes } from './routes/zohoRoutes.js'
 import { seedDefaultUser } from './services/authStore.js'
 
@@ -24,6 +25,7 @@ app.use(express.json({ limit: '1mb' }))
 
 app.use('/health', healthRoutes)
 app.use('/api/auth', authRoutes)
+app.use('/api/items', itemImageRoutes)
 app.use('/api/zoho', zohoRoutes)
 
 app.use(errorHandler)
