@@ -27,7 +27,7 @@ function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [nextItemsPage, setNextItemsPage] = useState(1)
   const [hasMoreCatalogItems, setHasMoreCatalogItems] = useState(true)
-  const [loadingCatalog, setLoadingCatalog] = useState(false)
+  const [loadingCatalog, setLoadingCatalog] = useState(true)
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null)
   const catalogFetchLock = useRef(false)
   const [addresses] = useState<string[]>([

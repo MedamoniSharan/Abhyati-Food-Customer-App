@@ -1,7 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ProductImage } from '../components/ProductImage'
 import type { Product } from '../types/app'
+import { fetchZohoItemDetail } from '../services/backendApi'
 import { formatInr } from '../utils/currency'
+import {
+  zohoItemToSpecRows,
+  zohoMinOrderQuantity,
+  zohoRateInr,
+  zohoStockLine,
+  zohoUnitLabel,
+  type ZohoSpecRow,
+} from '../utils/productDetailFromZoho'
 
 type Props = {
   product: Product
@@ -11,9 +20,76 @@ type Props = {
   onBuyNow: (product: Product, quantity: number) => void
 }
 
+function fallbackSpecRows(product: Product): ZohoSpecRow[] {
+  const rows: ZohoSpecRow[] = [{ label: 'Category', value: product.category }]
+  if (product.subtitle.trim()) {
+    rows.unshift({ label: 'Description', value: product.subtitle.trim() })
+  }
+  return rows
+}
+
 export function ProductDetailsScreen({ product, onBack, onOpenCart, onAddToCart, onBuyNow }: Props) {
+  const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
+  const [detailLoading, setDetailLoading] = useState(Boolean(product.zohoItemId))
+  const [detailError, setDetailError] = useState<string | null>(null)
+
   const [quantity, setQuantity] = useState(10)
-  const total = useMemo(() => product.priceInr * quantity, [product.priceInr, quantity])
+
+  useEffect(() => {
+    if (!product.zohoItemId) {
+      setDetail(null)
+      setDetailLoading(false)
+      setDetailError(null)
+      return
+    }
+    let cancelled = false
+    setDetailLoading(true)
+    setDetailError(null)
+    void fetchZohoItemDetail(product.zohoItemId).then((item) => {
+      if (cancelled) return
+      setDetail(item)
+      if (!item) setDetailError('Could not load product details from the server.')
+      setDetailLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [product.zohoItemId])
+
+  const minOrder = useMemo(() => zohoMinOrderQuantity(detail), [detail])
+
+  useEffect(() => {
+    setQuantity((q) => Math.max(minOrder, q))
+  }, [minOrder])
+
+  const displayName =
+    detail && detail.name != null && String(detail.name).trim()
+      ? String(detail.name).trim()
+      : product.name
+
+  const displayRate = detail ? (zohoRateInr(detail) ?? product.priceInr) : product.priceInr
+  const unitLabel = detail ? zohoUnitLabel(detail) : 'carton'
+  const stockLine = detail ? zohoStockLine(detail) : 'In stock, ready to ship'
+
+  const specRows: ZohoSpecRow[] = useMemo(() => {
+    if (detail) return zohoItemToSpecRows(detail)
+    return fallbackSpecRows(product)
+  }, [detail, product])
+
+  const total = useMemo(() => displayRate * quantity, [displayRate, quantity])
+
+  const productForCart = useMemo((): Product => {
+    const desc =
+      detail && typeof detail.description === 'string' && detail.description.trim()
+        ? detail.description.trim()
+        : product.subtitle
+    return {
+      ...product,
+      name: displayName,
+      priceInr: displayRate,
+      subtitle: desc,
+    }
+  }, [product, displayName, displayRate, detail])
 
   return (
     <>
@@ -33,28 +109,32 @@ export function ProductDetailsScreen({ product, onBack, onOpenCart, onAddToCart,
         <section className="gallery">
           <div className="hero-image">
             <ProductImage product={product} />
-            <span className="hero-tag">Best Seller</span>
+            {product.badge ? (
+              <span className={`hero-tag hero-tag-${product.badge.tone}`}>{product.badge.label}</span>
+            ) : null}
           </div>
         </section>
 
         <section className="product-heading">
-          <h2>{product.name}</h2>
+          <h2>{displayName}</h2>
           <div className="unit-price">
-            <strong>{formatInr(product.priceInr)}</strong>
-            <span>/ carton</span>
+            <strong>{formatInr(displayRate)}</strong>
+            <span> / {unitLabel}</span>
           </div>
-          <p className="stock">In stock, ready to ship</p>
+          <p className="stock">
+            {detailLoading && product.zohoItemId ? 'Loading stock…' : detailError ? detailError : stockLine}
+          </p>
         </section>
 
         <section className="details-card">
-          <p className="label">Bulk Quantity (Cartons)</p>
+          <p className="label">Bulk Quantity ({unitLabel})</p>
           <div className="quantity-row">
             <div className="quantity-box">
               <button
                 type="button"
                 className="counter-btn"
-                disabled={quantity <= 10}
-                onClick={() => setQuantity((q) => Math.max(10, q - 1))}
+                disabled={quantity <= minOrder}
+                onClick={() => setQuantity((q) => Math.max(minOrder, q - 1))}
               >
                 <span className="material-symbols-outlined">remove</span>
               </button>
@@ -68,46 +148,37 @@ export function ProductDetailsScreen({ product, onBack, onOpenCart, onAddToCart,
               <strong>{formatInr(total)}</strong>
             </div>
           </div>
-          <p className="min-order">Min. order: 10 cartons</p>
+          <p className="min-order">
+            Min. order: {minOrder} {unitLabel}
+            {detailLoading ? ' · checking catalog…' : ''}
+          </p>
         </section>
 
         <section className="details-card">
           <h3>Specifications</h3>
-          <div className="spec-grid">
-            <div>
-              <small>Material</small>
-              <p>Recycled Paper</p>
+          {detailLoading && product.zohoItemId ? (
+            <p className="product-detail-placeholder">Loading specifications…</p>
+          ) : specRows.length === 0 ? (
+            <p className="product-detail-placeholder">No specifications listed for this item.</p>
+          ) : (
+            <div className="spec-grid">
+              {specRows.map((row, index) => (
+                <div key={`${index}-${row.label}`}>
+                  <small>{row.label}</small>
+                  <p className={row.label === 'Description' ? 'spec-value-multiline' : undefined}>{row.value}</p>
+                </div>
+              ))}
             </div>
-            <div>
-              <small>Size</small>
-              <p>9 inches</p>
-            </div>
-            <div>
-              <small>GSM</small>
-              <p>250 GSM</p>
-            </div>
-            <div>
-              <small>Color</small>
-              <p>White</p>
-            </div>
-            <div>
-              <small>Coating</small>
-              <p>None</p>
-            </div>
-            <div>
-              <small>Biodegradable</small>
-              <p>Yes</p>
-            </div>
-          </div>
+          )}
         </section>
       </main>
 
       <div className="bottom-action-bar">
-        <button type="button" className="btn btn-outline" onClick={() => onAddToCart(product, quantity)}>
+        <button type="button" className="btn btn-outline" onClick={() => onAddToCart(productForCart, quantity)}>
           <span className="material-symbols-outlined">add_shopping_cart</span>
           Add to Cart
         </button>
-        <button type="button" className="btn btn-accent" onClick={() => onBuyNow(product, quantity)}>
+        <button type="button" className="btn btn-accent" onClick={() => onBuyNow(productForCart, quantity)}>
           <span className="material-symbols-outlined">bolt</span>
           Buy Now
         </button>

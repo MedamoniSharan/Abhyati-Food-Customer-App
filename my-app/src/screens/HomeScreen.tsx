@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { categories } from '../data/mockData'
 import type { Product } from '../types/app'
+import { CatalogLoader } from '../components/CatalogLoader'
 import { ProductCard } from '../components/ProductCard'
 import { ProductGridSkeleton } from '../components/ProductGridSkeleton'
 
@@ -146,7 +147,10 @@ export function HomeScreen({
         </div>
 
         {catalogBootstrapping ? (
-          <ProductGridSkeleton variant="grid" />
+          <div className="catalog-bootstrap-wrap">
+            <CatalogLoader label="Loading products from catalog…" />
+            <ProductGridSkeleton variant="grid" count={8} />
+          </div>
         ) : (
           <section className="product-grid">
             {products.map((product) => (
@@ -164,7 +168,15 @@ export function HomeScreen({
           <div ref={loadMoreSentinelRef} className="infinite-scroll-sentinel" aria-hidden />
         ) : null}
 
-        {loadingMoreCatalog ? <ProductGridSkeleton variant="inline" count={2} /> : null}
+        {loadingMoreCatalog ? (
+          <div className="catalog-load-more">
+            <div className="catalog-loader-inline" role="status" aria-live="polite" aria-busy="true">
+              <span className="catalog-loader-spinner catalog-loader-spinner-sm" aria-hidden />
+              <span className="catalog-loader-inline-text">Loading more products…</span>
+            </div>
+            <ProductGridSkeleton variant="inline" count={2} />
+          </div>
+        ) : null}
 
         {!catalogBootstrapping && products.length === 0 ? (
           <div className="empty-state">

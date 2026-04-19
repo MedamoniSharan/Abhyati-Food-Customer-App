@@ -159,6 +159,18 @@ export async function getBackendProducts(): Promise<Product[]> {
   return products
 }
 
+/** Full Zoho item (GET /items/:id) — includes stock locations, custom fields, etc. */
+export async function fetchZohoItemDetail(itemId: string): Promise<Record<string, unknown> | null> {
+  try {
+    const data = await request<Record<string, unknown>>(`/api/zoho/items/${encodeURIComponent(itemId)}`)
+    const nested = data['item'] as Record<string, unknown> | undefined
+    if (nested && typeof nested === 'object') return nested
+    return data
+  } catch {
+    return null
+  }
+}
+
 export async function getBackendOrders(): Promise<Order[]> {
   try {
     const response = await request<ZohoListResponse<ZohoSalesOrder>>('/api/zoho/sales-orders?per_page=200')
