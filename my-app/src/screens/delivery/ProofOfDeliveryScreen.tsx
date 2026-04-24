@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DeliveryStopDetail } from '../../data/deliveryMockData'
+import type { DeliveryStop } from '../../services/backendApi'
 
 const INVOICE_PREVIEW =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuADpsWe2NwiVMZ6KQnnuJWJyuiLobbzq5rZE2q8PaJW3ma0QUcVSCp7bBSgB4lTZuBdqcOteTtfn7yS5qNU-Ji-NytoSiEcQJQ_BFPzLlru269Old1Yl1GyTcBZD7Q_5Im0If84rjpvqaEX_uZuFMaU7MSghRtKcKGowa7o5T7B3-SAaZsuqd2aKRh24o76KOM1zVPKa0wAsFugUS0_qSBEsQA7sZdk6CldX7v9dJsWy4iOal0jNLo5UCMIr1Ls0weBvc_5CKEEq794'
 
 type Props = {
-  detail: DeliveryStopDetail
+  detail: DeliveryStop
   onBack: () => void
-  onConfirm: () => void
+  onConfirm: (recipient: string) => void
   onNotify: (message: string) => void
 }
 
@@ -44,6 +44,19 @@ export function ProofOfDeliveryScreen({ detail, onBack, onConfirm, onNotify }: P
     window.addEventListener('resize', resizeCanvas)
     return () => window.removeEventListener('resize', resizeCanvas)
   }, [resizeCanvas])
+
+  useEffect(() => {
+    async function requestCameraPermission() {
+      if (!navigator.mediaDevices?.getUserMedia) return
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        stream.getTracks().forEach((track) => track.stop())
+      } catch {
+        onNotify('Camera permission is required for invoice capture')
+      }
+    }
+    requestCameraPermission()
+  }, [onNotify])
 
   function getPoint(e: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current
@@ -250,7 +263,7 @@ export function ProofOfDeliveryScreen({ detail, onBack, onConfirm, onNotify }: P
               onNotify('Please enter recipient name')
               return
             }
-            onConfirm()
+            onConfirm(recipient.trim())
           }}
         >
           Confirm Delivery

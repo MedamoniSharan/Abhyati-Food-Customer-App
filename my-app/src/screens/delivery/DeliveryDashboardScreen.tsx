@@ -1,13 +1,26 @@
 import { DeliveryGoogleMap } from '../../components/DeliveryGoogleMap'
-import { dashboardCurrentTask } from '../../data/deliveryMockData'
+import type { DeliveryStop } from '../../services/backendApi'
 
 type Props = {
+  currentStop: DeliveryStop | null
+  totalStops: number
+  completedStops: number
   onStartNavigation: () => void
+  onCallCurrent: () => void
   onViewAllDeliveries: () => void
   onNotify: (message: string) => void
 }
 
-export function DeliveryDashboardScreen({ onStartNavigation, onViewAllDeliveries, onNotify }: Props) {
+export function DeliveryDashboardScreen({
+  currentStop,
+  totalStops,
+  completedStops,
+  onStartNavigation,
+  onCallCurrent,
+  onViewAllDeliveries,
+  onNotify,
+}: Props) {
+  const pendingStops = Math.max(totalStops - completedStops, 0)
   return (
     <>
       <header className="dd-header">
@@ -48,10 +61,10 @@ export function DeliveryDashboardScreen({ onStartNavigation, onViewAllDeliveries
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Total Assigned
               </p>
-              <p className="dd-hero-num">8</p>
+              <p className="dd-hero-num">{totalStops}</p>
               <div className="dd-hero-badge">
-                <span>+2</span>
-                <span>new today</span>
+                <span>{pendingStops}</span>
+                <span>pending</span>
               </div>
             </div>
             <div className="dd-orbit" aria-hidden>
@@ -68,7 +81,7 @@ export function DeliveryDashboardScreen({ onStartNavigation, onViewAllDeliveries
               </span>
               Completed
             </div>
-            <p className="dd-stat-value">5</p>
+            <p className="dd-stat-value">{completedStops}</p>
           </div>
           <div className="dd-stat-card">
             <div className="dd-stat-label">
@@ -80,7 +93,7 @@ export function DeliveryDashboardScreen({ onStartNavigation, onViewAllDeliveries
               </span>
               Pending
             </div>
-            <p className="dd-stat-value">3</p>
+            <p className="dd-stat-value">{pendingStops}</p>
           </div>
         </div>
 
@@ -94,8 +107,7 @@ export function DeliveryDashboardScreen({ onStartNavigation, onViewAllDeliveries
         <div className="dd-card" style={{ overflow: 'hidden', padding: 0 }}>
           <div className="dd-map-tile" style={{ aspectRatio: '16 / 11', borderRadius: 0 }}>
             <DeliveryGoogleMap
-              destination={dashboardCurrentTask.mapsDestination}
-              fallbackImageUrl={dashboardCurrentTask.mapImage}
+              destination={currentStop?.mapsQuery || 'India'}
             />
             <div className="dd-map-grad" style={{ pointerEvents: 'none' }} />
             <div className="dd-map-pills" style={{ pointerEvents: 'none' }}>
@@ -108,15 +120,15 @@ export function DeliveryDashboardScreen({ onStartNavigation, onViewAllDeliveries
           <div style={{ padding: 18 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
               <div>
-                <h4 style={{ margin: '0 0 6px', fontSize: '1.15rem' }}>{dashboardCurrentTask.businessName}</h4>
+                <h4 style={{ margin: '0 0 6px', fontSize: '1.15rem' }}>{currentStop?.businessName || 'No delivery assigned'}</h4>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--dd-muted)', fontSize: '0.875rem' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
                     location_on
                   </span>
-                  {dashboardCurrentTask.address}
+                  {currentStop?.address || 'No address available'}
                 </div>
               </div>
-              <button type="button" className="dd-icon-btn dd-card" aria-label="Call customer">
+              <button type="button" className="dd-icon-btn dd-card" aria-label="Call customer" onClick={onCallCurrent} disabled={!currentStop?.phone}>
                 <span className="material-symbols-outlined">call</span>
               </button>
             </div>
@@ -132,18 +144,18 @@ export function DeliveryDashboardScreen({ onStartNavigation, onViewAllDeliveries
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--dd-muted)' }}>Order ID</span>
-                <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{dashboardCurrentTask.orderId}</span>
+                <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{currentStop?.orderId || '-'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--dd-muted)' }}>Items</span>
-                <span style={{ fontWeight: 600 }}>{dashboardCurrentTask.itemsSummary}</span>
+                <span style={{ fontWeight: 600 }}>{currentStop ? `${currentStop.items.length} items` : '-'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--dd-muted)' }}>Est. Arrival</span>
-                <span style={{ fontWeight: 700, color: 'var(--dd-accent)' }}>{dashboardCurrentTask.eta}</span>
+                <span style={{ fontWeight: 700, color: 'var(--dd-accent)' }}>{currentStop?.arrivalWindow || '-'}</span>
               </div>
             </div>
-            <button type="button" className="dd-accent-btn" style={{ marginTop: 18 }} onClick={onStartNavigation}>
+            <button type="button" className="dd-accent-btn" style={{ marginTop: 18 }} onClick={onStartNavigation} disabled={!currentStop}>
               <span className="material-symbols-outlined">navigation</span>
               Start Navigation
             </button>

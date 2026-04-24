@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { routeStops } from '../../data/deliveryMockData'
+import type { DeliveryStop } from '../../services/backendApi'
+import { formatInr } from '../../utils/currency'
 
 type Props = {
+  stops: DeliveryStop[]
+  loading?: boolean
   onOpenStop: (stopId: string) => void
   onBackToDashboard: () => void
   onViewMap: () => void
@@ -17,7 +20,7 @@ const WEEK = [
   { day: 'Sat', date: 28 },
 ]
 
-export function AssignedDeliveriesScreen({ onOpenStop, onBackToDashboard, onViewMap, onNotify }: Props) {
+export function AssignedDeliveriesScreen({ stops, loading, onOpenStop, onBackToDashboard, onViewMap, onNotify }: Props) {
   const [selectedDay, setSelectedDay] = useState(23)
 
   return (
@@ -72,7 +75,7 @@ export function AssignedDeliveriesScreen({ onOpenStop, onBackToDashboard, onView
               </span>
               Total Stops
             </div>
-            <p className="dd-stat-value">8</p>
+            <p className="dd-stat-value">{stops.length}</p>
           </div>
           <div className="dd-stat-card">
             <div className="dd-stat-label">
@@ -84,7 +87,7 @@ export function AssignedDeliveriesScreen({ onOpenStop, onBackToDashboard, onView
               </span>
               Completed
             </div>
-            <p className="dd-stat-value">2</p>
+            <p className="dd-stat-value">{stops.filter((s) => s.statusTag.toLowerCase().includes('deliver')).length}</p>
           </div>
         </div>
 
@@ -95,7 +98,9 @@ export function AssignedDeliveriesScreen({ onOpenStop, onBackToDashboard, onView
           </button>
         </div>
 
-        {routeStops.map((stop) => (
+        {loading ? <p style={{ color: 'var(--dd-muted)' }}>Loading deliveries...</p> : null}
+        {!loading && stops.length === 0 ? <p style={{ color: 'var(--dd-muted)' }}>No deliveries assigned.</p> : null}
+        {stops.map((stop) => (
           <article key={stop.id} className={`dd-route-card ${stop.isNext ? 'next' : ''}`}>
             <div className="dd-route-inner">
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
@@ -108,7 +113,7 @@ export function AssignedDeliveriesScreen({ onOpenStop, onBackToDashboard, onView
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ display: 'block', fontSize: '1.1rem', fontWeight: 700 }}>
-                    ${stop.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatInr(stop.amount)}
                   </span>
                   <span style={{ fontSize: '0.7rem', color: 'var(--dd-muted)' }}>{stop.paymentLabel}</span>
                 </div>

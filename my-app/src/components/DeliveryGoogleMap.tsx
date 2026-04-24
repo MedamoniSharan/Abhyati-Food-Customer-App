@@ -41,11 +41,14 @@ export function DeliveryGoogleMap({ destination, fallbackImageUrl, className }: 
     refreshLocation()
   }, [refreshLocation])
 
+  const publicEmbedSrc = destination.trim()
+    ? `https://maps.google.com/maps?q=${encodeURIComponent(destination)}&output=embed`
+    : null
   const embedSrc = apiKey
     ? userOrigin
       ? buildDirectionsEmbedSrc(userOrigin, destination, apiKey)
       : buildPlaceEmbedSrc(destination, apiKey)
-    : null
+    : publicEmbedSrc
 
   const externalUrl = buildGoogleMapsDirectionsUrl(destination, userOrigin)
 
@@ -65,9 +68,7 @@ export function DeliveryGoogleMap({ destination, fallbackImageUrl, className }: 
           {fallbackImageUrl ? <div className="dd-map-bg" style={{ backgroundImage: `url(${fallbackImageUrl})` }} /> : null}
           <div className="dd-gmap-fallback-panel">
             <p className="dd-gmap-fallback-title">Maps</p>
-            <p className="dd-gmap-fallback-text">
-              Add VITE_GOOGLE_MAPS_API_KEY (Maps Embed API) for an embedded map, or open in Google Maps.
-            </p>
+            <p className="dd-gmap-fallback-text">Using public Google Maps embed. Open in Google Maps for turn-by-turn navigation.</p>
             {locStatus === 'denied' ? (
               <p className="dd-gmap-fallback-hint">Location denied — map shows destination only in Google Maps.</p>
             ) : null}

@@ -1,15 +1,18 @@
 import { DeliveryGoogleMap } from '../../components/DeliveryGoogleMap'
-import type { DeliveryStopDetail } from '../../data/deliveryMockData'
+import type { DeliveryStop } from '../../services/backendApi'
 
 type Props = {
-  detail: DeliveryStopDetail
+  detail: DeliveryStop
   onBack: () => void
   onStartNavigation: () => void
   onOpenProof: () => void
+  onOpenAddress: () => void
+  onMessage: () => void
+  onCall: () => void
   onNotify: (message: string) => void
 }
 
-export function DeliveryDetailScreen({ detail, onBack, onStartNavigation, onOpenProof, onNotify }: Props) {
+export function DeliveryDetailScreen({ detail, onBack, onStartNavigation, onOpenProof, onOpenAddress, onMessage, onCall, onNotify }: Props) {
   return (
     <>
       <header className="dd-header">
@@ -26,7 +29,7 @@ export function DeliveryDetailScreen({ detail, onBack, onStartNavigation, onOpen
 
       <main className="dd-main" style={{ paddingBottom: 120 }}>
         <div className="dd-map-tile" style={{ aspectRatio: '16 / 10', marginBottom: 12 }}>
-          <DeliveryGoogleMap destination={detail.mapsQuery} fallbackImageUrl={detail.mapImage} />
+          <DeliveryGoogleMap destination={detail.mapsQuery} />
         </div>
 
         <div className="dd-card" style={{ padding: 20, marginBottom: 12 }}>
@@ -59,7 +62,7 @@ export function DeliveryDetailScreen({ detail, onBack, onStartNavigation, onOpen
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <button type="button" className="dd-link" style={{ width: '100%', textAlign: 'left', padding: 0 }} onClick={() => onNotify('Open address')}>
+            <button type="button" className="dd-link" style={{ width: '100%', textAlign: 'left', padding: 0 }} onClick={onOpenAddress}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <span className="material-symbols-outlined" style={{ marginTop: 2 }}>
@@ -87,12 +90,12 @@ export function DeliveryDetailScreen({ detail, onBack, onStartNavigation, onOpen
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" className="dd-icon-btn dd-card" aria-label="SMS" onClick={() => onNotify('SMS')}>
+                <button type="button" className="dd-icon-btn dd-card" aria-label="SMS" onClick={onMessage}>
                   <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
                     sms
                   </span>
                 </button>
-                <button type="button" className="dd-icon-btn dd-card" aria-label="Call" onClick={() => onNotify('Calling…')}>
+                <button type="button" className="dd-icon-btn dd-card" aria-label="Call" onClick={onCall}>
                   <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
                     call
                   </span>
