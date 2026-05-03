@@ -1,18 +1,11 @@
 import type { AuthUser } from '../services/authApi'
 
-const STORAGE_KEY = 'abhyati_food_signed_in'
-const ROLE_KEY = 'abhyati_food_role'
-const USER_KEY = 'abhyati_food_user_json'
+const STORAGE_KEY = 'abhyati_delivery_signed_in'
+const USER_KEY = 'abhyati_delivery_user_json'
 
 export function readSignedIn(): boolean {
   try {
-    if (localStorage.getItem(STORAGE_KEY) !== '1') return false
-    const r = localStorage.getItem(ROLE_KEY)
-    if (r === 'driver') {
-      clearSignedIn()
-      return false
-    }
-    return true
+    return localStorage.getItem(STORAGE_KEY) === '1'
   } catch {
     return false
   }
@@ -30,13 +23,10 @@ export function readSessionUser(): AuthUser | null {
   }
 }
 
-export function writeSignedIn(user?: AuthUser): void {
+export function writeSignedIn(user: AuthUser): void {
   try {
     localStorage.setItem(STORAGE_KEY, '1')
-    localStorage.setItem(ROLE_KEY, 'customer')
-    if (user) {
-      localStorage.setItem(USER_KEY, JSON.stringify(user))
-    }
+    localStorage.setItem(USER_KEY, JSON.stringify(user))
   } catch {
     /* private mode / quota */
   }
@@ -45,7 +35,6 @@ export function writeSignedIn(user?: AuthUser): void {
 export function clearSignedIn(): void {
   try {
     localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(ROLE_KEY)
     localStorage.removeItem(USER_KEY)
   } catch {
     /* ignore */

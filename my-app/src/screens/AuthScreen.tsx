@@ -2,13 +2,11 @@ import { useState } from 'react'
 import { useToast } from '../contexts/ToastContext'
 import { loginCustomer, signupCustomer } from '../services/authApi'
 import type { AuthUser } from '../services/authApi'
-import type { AppRole } from '../types/auth'
 
-type AuthView = 'welcome' | 'login' | 'signup' | 'driver-login'
+type AuthView = 'welcome' | 'login' | 'signup'
 
 export type AuthSuccessPayload = {
   message: string
-  role: AppRole
   user: AuthUser
 }
 
@@ -25,34 +23,18 @@ export function AuthScreen({ onAuthenticated }: Props) {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  async function submitAuth(role: AppRole) {
+  async function submitAuth() {
     setLoading(true)
 
     try {
       if (view === 'signup') {
         const result = await signupCustomer({ fullName, email, password })
-        onAuthenticated({ message: `Welcome ${result.user.fullName}`, role: 'customer', user: result.user })
-        return
-      }
-
-      if (role === 'driver' || view === 'driver-login') {
-        const e = email.trim()
-        const localPart = e.includes('@') ? e.slice(0, e.indexOf('@')) : e
-        const displayName = localPart ? localPart.replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Driver'
-        onAuthenticated({
-          message: `Signed in as ${displayName}`,
-          role: 'driver',
-          user: {
-            id: 'driver_local',
-            fullName: displayName,
-            email: e || 'driver@local',
-          },
-        })
+        onAuthenticated({ message: `Welcome ${result.user.fullName}`, user: result.user })
         return
       }
 
       const result = await loginCustomer({ email, password })
-      onAuthenticated({ message: `Welcome back ${result.user.fullName}`, role: 'customer', user: result.user })
+      onAuthenticated({ message: `Welcome back ${result.user.fullName}`, user: result.user })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Authentication failed'
       showToast(message, { variant: 'error' })
@@ -68,13 +50,10 @@ export function AuthScreen({ onAuthenticated }: Props) {
         <div className="auth-content">
           <img src="/app-logo.png" alt="Abhyati food logo" className="auth-logo" />
           <h1>Abhyati food</h1>
-          <p className="auth-welcome-hint">Choose how you use the app</p>
+          <p className="auth-welcome-hint">Shop and order from our catalog</p>
           <div className="auth-welcome-actions">
             <button type="button" className="auth-primary-btn" onClick={() => setView('login')}>
-              Customer — shop &amp; order
-            </button>
-            <button type="button" className="auth-secondary-btn" onClick={() => setView('driver-login')}>
-              Delivery driver
+              Get started
             </button>
           </div>
         </div>
@@ -82,22 +61,14 @@ export function AuthScreen({ onAuthenticated }: Props) {
     )
   }
 
-  const isDriverForm = view === 'driver-login'
-
   return (
     <section className="auth-shell auth-form-shell">
       <div className="auth-overlay" />
       <div className="auth-form-card">
         <img src="/app-logo.png" alt="Abhyati food logo" className="auth-logo auth-logo-top" />
-        <h2>
-          {isDriverForm ? 'Driver sign in' : view === 'login' ? 'Welcome Back !' : 'Create Account'}
-        </h2>
+        <h2>{view === 'login' ? 'Welcome Back !' : 'Create Account'}</h2>
         <p>
-          {isDriverForm
-            ? 'Local demo: log in without the server (email optional).'
-            : view === 'login'
-              ? 'Your world of living colors awaits'
-              : 'Join Abhyati food today'}
+          {view === 'login' ? 'Your world of living colors awaits' : 'Join Abhyati food today'}
         </p>
 
         {view === 'signup' ? (
@@ -139,28 +110,17 @@ export function AuthScreen({ onAuthenticated }: Props) {
           </button>
         </div>
 
-        <button
-          type="button"
-          className="auth-primary-btn"
-          onClick={() => submitAuth(isDriverForm ? 'driver' : 'customer')}
-          disabled={loading}
-        >
+        <button type="button" className="auth-primary-btn" onClick={() => void submitAuth()} disabled={loading}>
           {loading ? 'Please wait...' : view === 'signup' ? 'Create Account' : 'Log In'}
         </button>
 
-        {isDriverForm ? (
-          <button type="button" className="auth-link-btn" onClick={() => setView('welcome')}>
-            Back to sign-in options
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="auth-link-btn"
-            onClick={() => setView((prev) => (prev === 'login' ? 'signup' : 'login'))}
-          >
-            {view === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Log In'}
-          </button>
-        )}
+        <button
+          type="button"
+          className="auth-link-btn"
+          onClick={() => setView((prev) => (prev === 'login' ? 'signup' : 'login'))}
+        >
+          {view === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Log In'}
+        </button>
       </div>
     </section>
   )
