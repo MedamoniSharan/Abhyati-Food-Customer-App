@@ -20,6 +20,12 @@ npm run admin:dev
 
 Open `http://localhost:5174` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from [`backend/.env.example`](backend/.env.example) (defaults are `admin@example.com` / `adminadmin` until you change them).
 
+**API URL:** By default the admin UI calls `/api` on the same host and Vite proxies to **`http://localhost:3001`** (override with `VITE_PROXY_TARGET` in [`admin-dashboard/.env.example`](admin-dashboard/.env.example)). To use a **hosted** backend instead (e.g. Render), create `admin-dashboard/.env.local`:
+
+`VITE_API_BASE_URL=https://abhyati-food-customer-app.onrender.com`
+
+Then restart `npm run admin:dev`. Ensure Render `ALLOWED_ORIGINS` includes `http://localhost:5174` if you use CORS restrictions (this repo’s backend uses `cors({ origin: '*' })` so it is usually fine).
+
 The dashboard manages **customers** (Zoho customer + app login), **drivers** (Zoho contact + delivery login), **deliveries** (read-only from Zoho sales orders), and a **KPI overview**. Admin actions are appended to `backend/data/admin-audit.jsonl`.
 
 ## Backend setup (Zoho Books)

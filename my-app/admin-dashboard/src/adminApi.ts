@@ -1,3 +1,5 @@
+import { apiUrl } from './apiBase'
+
 const TOKEN_KEY = 'abhyati_admin_jwt'
 
 export function getAdminToken(): string | null {
@@ -17,13 +19,32 @@ export function setAdminToken(token: string | null): void {
   }
 }
 
+function parseJsonSafe(text: string): { ok: true; data: unknown } | { ok: false; raw: string } {
+  const t = text.trim()
+  if (!t) return { ok: true, data: {} }
+  try {
+    return { ok: true, data: JSON.parse(t) as unknown }
+  } catch {
+    return { ok: false, raw: t }
+  }
+}
+
 export async function adminLogin(email: string, password: string): Promise<string> {
-  const res = await fetch('/api/admin/login', {
+  const res = await fetch(apiUrl('/api/admin/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
   })
-  const data = (await res.json()) as { message?: string; token?: string }
+  const text = await res.text()
+  const parsed = parseJsonSafe(text)
+  if (!parsed.ok) {
+    throw new Error(
+      res.ok
+        ? 'Invalid JSON from server'
+        : `Login failed (${res.status}). ${parsed.raw.slice(0, 120)}`
+    )
+  }
+  const data = parsed.data as { message?: string; token?: string }
   if (!res.ok) throw new Error(data.message || `Login failed (${res.status})`)
   if (!data.token) throw new Error('No token in response')
   setAdminToken(data.token)
@@ -38,19 +59,18 @@ export async function adminFetch<T>(path: string, init: RequestInit = {}): Promi
   if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
     headers.set('Content-Type', 'application/json')
   }
-  const res = await fetch(path.startsWith('http') ? path : path, { ...init, headers })
+  const res = await fetch(apiUrl(path), { ...init, headers })
   const text = await res.text()
-  let data: unknown = {}
-  try {
-    data = text ? JSON.parse(text) : {}
-  } catch {
-    data = { raw: text }
+  const parsed = parseJsonSafe(text)
+  if (!parsed.ok) {
+    throw new Error(
+      res.ok ? 'Invalid JSON from server' : `Request failed (${res.status}). ${parsed.raw.slice(0, 160)}`
+    )
   }
+  const data = parsed.data as Record<string, unknown>
   if (!res.ok) {
     const msg =
-      typeof data === 'object' && data && 'message' in data
-        ? String((data as { message: string }).message)
-        : `Request failed (${res.status})`
+      typeof data.message === 'string' ? data.message : `Request failed (${res.status})`
     throw new Error(msg)
   }
   return data as T
