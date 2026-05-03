@@ -1,9 +1,8 @@
 import axios from 'axios'
-import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken'
 import { ZodError } from 'zod'
 
 export function errorHandler(error, _req, res, _next) {
-  if (error instanceof JsonWebTokenError || error instanceof TokenExpiredError) {
+  if (error?.name === 'JsonWebTokenError' || error?.name === 'TokenExpiredError') {
     return res.status(401).json({ message: 'Invalid or expired token' })
   }
 
