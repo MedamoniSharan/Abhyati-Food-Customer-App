@@ -12,7 +12,7 @@ itemImageRoutes.get('/:itemId/image', async (req, res, next) => {
       return res.status(400).json({ message: 'Missing item id' })
     }
 
-    const result = await streamItemImageFromZoho(itemId, res)
+    const result = await streamItemImageFromZoho(itemId)
 
     if (!result.ok) {
       const status = result.status === 404 ? 404 : 500

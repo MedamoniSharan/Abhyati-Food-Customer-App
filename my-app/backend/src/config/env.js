@@ -6,7 +6,7 @@ dotenv.config()
 const envSchema = z.object({
   NODE_ENV: z.string().default('development'),
   PORT: z.coerce.number().default(4000),
-  ALLOWED_ORIGINS: z.string().default('http://localhost:5173'),
+  ALLOWED_ORIGINS: z.string().default('http://localhost:5173', 'http://localhost:5174', '*'),
 
   ZOHO_CLIENT_ID: z.string().min(1),
   ZOHO_CLIENT_SECRET: z.string().min(1),

@@ -26,7 +26,7 @@ Open `http://localhost:5174` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` f
 
 Then restart `npm run admin:dev`. Ensure Render `ALLOWED_ORIGINS` includes `http://localhost:5174` if you use CORS restrictions (this repo’s backend uses `cors({ origin: '*' })` so it is usually fine).
 
-The dashboard manages **customers** (Zoho customer + app login), **drivers** (Zoho contact + delivery login), **deliveries** (read-only from Zoho sales orders), and a **KPI overview**. Admin actions are appended to `backend/data/admin-audit.jsonl`.
+The dashboard manages **customers** (Zoho customer + app login), **drivers** (Zoho contact + delivery login), **products** (Zoho items — create / edit / delete, same source as the customer app catalog), **orders & delivery** (same Zoho **sales orders** as the driver app, plus create new sales orders with line items), and a **KPI overview**. Admin actions are appended to `backend/data/admin-audit.jsonl`.
 
 ## Backend setup (Zoho Books)
 

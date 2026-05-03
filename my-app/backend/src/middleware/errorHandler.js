@@ -1,4 +1,5 @@
 import axios from 'axios'
+import multer from 'multer'
 import { ZodError } from 'zod'
 
 export function errorHandler(error, _req, res, _next) {
@@ -11,6 +12,16 @@ export function errorHandler(error, _req, res, _next) {
       message: 'Invalid request payload',
       errors: error.flatten().fieldErrors
     })
+  }
+
+  if (error instanceof multer.MulterError) {
+    const msg =
+      error.code === 'LIMIT_FILE_SIZE'
+        ? 'Image too large (max 6 MB)'
+        : error.code === 'LIMIT_UNEXPECTED_FILE'
+          ? 'Unexpected file field (use field name: image)'
+          : error.message
+    return res.status(400).json({ message: msg })
   }
 
   if (axios.isAxiosError(error)) {

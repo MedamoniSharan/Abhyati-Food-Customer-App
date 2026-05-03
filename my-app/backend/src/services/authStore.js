@@ -141,3 +141,31 @@ export function deleteCustomerUserByEmail(email) {
   persistUsers()
   return true
 }
+
+export function updateCustomerUserByEmail(email, updates) {
+  const normalizedEmail = normalizeEmail(email)
+  const existing = usersByEmail.get(normalizedEmail)
+  if (!existing) return null
+
+  const nextEmail = updates.email ? normalizeEmail(updates.email) : normalizedEmail
+  if (nextEmail !== normalizedEmail && usersByEmail.has(nextEmail)) {
+    const error = new Error('Email already exists')
+    error.statusCode = 409
+    throw error
+  }
+
+  const next = {
+    ...existing,
+    fullName: typeof updates.fullName === 'string' ? updates.fullName.trim() || existing.fullName : existing.fullName,
+    email: nextEmail,
+    passwordHash:
+      typeof updates.password === 'string' && updates.password
+        ? hashPassword(updates.password)
+        : existing.passwordHash
+  }
+
+  if (nextEmail !== normalizedEmail) usersByEmail.delete(normalizedEmail)
+  usersByEmail.set(nextEmail, next)
+  persistUsers()
+  return toPublicUser(next)
+}

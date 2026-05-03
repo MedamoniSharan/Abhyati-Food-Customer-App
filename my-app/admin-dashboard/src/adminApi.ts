@@ -75,3 +75,28 @@ export async function adminFetch<T>(path: string, init: RequestInit = {}): Promi
   }
   return data as T
 }
+
+/** POST multipart to `/api/admin/items/:id/image` (field name: `image`). */
+export async function adminUploadItemImage(itemId: string, file: File): Promise<void> {
+  const token = getAdminToken()
+  if (!token) throw new Error('Not signed in')
+  const fd = new FormData()
+  fd.append('image', file)
+  const res = await fetch(apiUrl(`/api/admin/items/${encodeURIComponent(itemId)}/image`), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: fd
+  })
+  const text = await res.text()
+  const parsed = parseJsonSafe(text)
+  if (!parsed.ok) {
+    throw new Error(
+      res.ok ? 'Invalid JSON from server' : `Upload failed (${res.status}). ${parsed.raw.slice(0, 160)}`
+    )
+  }
+  const data = parsed.data as Record<string, unknown>
+  if (!res.ok) {
+    const msg = typeof data.message === 'string' ? data.message : `Upload failed (${res.status})`
+    throw new Error(msg)
+  }
+}

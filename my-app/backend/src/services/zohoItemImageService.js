@@ -4,6 +4,66 @@ import { getOrganizationId } from './zohoBooksService.js'
 import { resolveZohoAccessToken } from './zohoTokenProvider.js'
 
 /**
+ * POST multipart image to Zoho Books for an item (same catalog as GET …/image).
+ * Tries /image then /images because Zoho orgs/docs vary slightly on the path.
+ */
+export async function uploadItemImageToZoho(itemId, { buffer, mimetype, originalname }) {
+  const organizationId = await getOrganizationId()
+  const accessToken = await resolveZohoAccessToken()
+  const base = `${env.ZOHO_BOOKS_BASE_URL}/items/${encodeURIComponent(itemId)}`
+
+  const buildForm = () => {
+    const form = new FormData()
+    const blob = new Blob([buffer], { type: mimetype || 'application/octet-stream' })
+    form.append('image', blob, originalname || 'product.jpg')
+    return form
+  }
+
+  const post = async (pathSuffix) => {
+    const url = `${base}${pathSuffix}`
+    return axios({
+      method: 'POST',
+      url,
+      params: { organization_id: organizationId },
+      headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+      data: buildForm(),
+      maxBodyLength: 12 * 1024 * 1024,
+      maxContentLength: 12 * 1024 * 1024,
+      validateStatus: () => true,
+      timeout: 120_000
+    })
+  }
+
+  let zohoResponse = await post('/image')
+  if (zohoResponse.status === 404 || zohoResponse.status === 405) {
+    zohoResponse = await post('/images')
+  }
+
+  const status = zohoResponse.status
+  const data = zohoResponse.data
+
+  if (status < 200 || status >= 300) {
+    const msg =
+      typeof data === 'object' && data && typeof data.message === 'string'
+        ? data.message
+        : `Zoho image upload failed (${status})`
+    const err = new Error(msg)
+    err.statusCode = status >= 400 && status < 600 ? status : 502
+    err.zohoBody = data
+    throw err
+  }
+
+  if (data && typeof data === 'object' && 'code' in data && Number(data.code) !== 0) {
+    const err = new Error(typeof data.message === 'string' ? data.message : 'Zoho rejected image upload')
+    err.statusCode = 400
+    err.zohoBody = data
+    throw err
+  }
+
+  return { ok: true, data }
+}
+
+/**
  * Streams item image bytes from Zoho Books (no local persistence).
  * GET {ZOHO_BOOKS_BASE_URL}/items/{item_id}/image?organization_id=...
  */

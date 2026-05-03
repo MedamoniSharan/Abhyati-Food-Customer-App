@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
 import { adminFetch, adminLogin, getAdminToken, setAdminToken } from './adminApi'
+import { IconDeleteButton, IconEditButton } from './components/AdminIconButtons'
+import { ProductsSection } from './components/ProductsSection'
 
 type Page = 'dashboard' | 'customers' | 'drivers' | 'products' | 'deliveries' | 'settings'
+
+type ZohoContactRow = { contact_id?: string; contact_name?: string; email?: string }
+type SalesOrderRow = {
+  salesorder_id?: string
+  salesorder_number?: string
+  reference_number?: string
+  customer_name?: string
+  date?: string
+  status?: string
+  total?: number
+}
 
 type Overview = {
   invoiceCount: number
@@ -35,9 +48,19 @@ export default function App() {
     Array<AuthUser & { zohoContactId?: string; disabled?: boolean }>
   >([])
   const [deliveries, setDeliveries] = useState<DeliveryRow[]>([])
-  const [items, setItems] = useState<Array<Record<string, unknown>>>([])
+  const [salesOrdersRaw, setSalesOrdersRaw] = useState<SalesOrderRow[]>([])
+  /** Zoho items for sales-order line picker (broader list than paginated products page). */
+  const [orderItems, setOrderItems] = useState<Array<Record<string, unknown>>>([])
+  const [zohoContacts, setZohoContacts] = useState<ZohoContactRow[]>([])
   const [newCustomer, setNewCustomer] = useState({ fullName: '', email: '', password: '', mobile: '' })
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false)
+  const [editingCustomer, setEditingCustomer] = useState<{ id: string; fullName: string; email: string } | null>(null)
+  const [editingCustomerMobile, setEditingCustomerMobile] = useState('')
+  const [editingCustomerPassword, setEditingCustomerPassword] = useState('')
   const [newDriver, setNewDriver] = useState({ fullName: '', email: '', password: '' })
+  const [orderCustomerId, setOrderCustomerId] = useState('')
+  const [orderRef, setOrderRef] = useState('')
+  const [orderLines, setOrderLines] = useState([{ item_id: '', quantity: '1', rate: '' }])
 
   const refreshOverview = useCallback(async () => {
     const o = await adminFetch<Overview>('/api/admin/overview')
@@ -55,13 +78,22 @@ export default function App() {
   }, [])
 
   const refreshDeliveries = useCallback(async () => {
-    const r = await adminFetch<{ deliveries: DeliveryRow[] }>('/api/admin/deliveries')
+    const r = await adminFetch<{ deliveries: DeliveryRow[]; salesorders?: SalesOrderRow[] }>(
+      '/api/admin/deliveries'
+    )
     setDeliveries(r.deliveries || [])
+    setSalesOrdersRaw(Array.isArray(r.salesorders) ? r.salesorders : [])
+    try {
+      const ir = await adminFetch<{ items?: Array<Record<string, unknown>> }>('/api/admin/items?per_page=200')
+      setOrderItems(Array.isArray(ir.items) ? ir.items : [])
+    } catch {
+      setOrderItems([])
+    }
   }, [])
 
-  const refreshItems = useCallback(async () => {
-    const r = await adminFetch<{ items?: Array<Record<string, unknown>> }>('/api/admin/items?per_page=50')
-    setItems(Array.isArray(r.items) ? r.items : [])
+  const refreshZohoContacts = useCallback(async () => {
+    const r = await adminFetch<{ contacts?: ZohoContactRow[] }>('/api/admin/zoho/customer-contacts')
+    setZohoContacts(Array.isArray(r.contacts) ? r.contacts : [])
   }, [])
 
   const loadPageData = useCallback(async () => {
@@ -70,8 +102,9 @@ export default function App() {
       if (page === 'dashboard') await refreshOverview()
       if (page === 'customers') await refreshCustomers()
       if (page === 'drivers') await refreshDrivers()
-      if (page === 'deliveries') await refreshDeliveries()
-      if (page === 'products') await refreshItems()
+      if (page === 'deliveries') {
+        await Promise.all([refreshDeliveries(), refreshZohoContacts()])
+      }
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : 'Failed to load')
       if (String(e).includes('401') || String(e).includes('Invalid')) {
@@ -79,7 +112,7 @@ export default function App() {
         setTokenState(null)
       }
     }
-  }, [page, refreshCustomers, refreshDeliveries, refreshDrivers, refreshItems, refreshOverview])
+  }, [page, refreshCustomers, refreshDeliveries, refreshDrivers, refreshOverview, refreshZohoContacts])
 
   useEffect(() => {
     if (!token) return
@@ -149,7 +182,7 @@ export default function App() {
               ['customers', 'Customers'],
               ['drivers', 'Drivers'],
               ['products', 'Products'],
-              ['deliveries', 'Deliveries'],
+              ['deliveries', 'Orders & delivery'],
               ['settings', 'Settings']
             ] as const
           ).map(([id, label]) => (
@@ -199,55 +232,9 @@ export default function App() {
             <>
               <h2 style={{ marginTop: 0 }}>Customers</h2>
               <p style={{ color: 'var(--admin-muted)' }}>Create app logins and Zoho customer contacts.</p>
-              <div className="admin-form-row">
-                <input
-                  className="admin-input"
-                  placeholder="Full name"
-                  value={newCustomer.fullName}
-                  onChange={(e) => setNewCustomer((c) => ({ ...c, fullName: e.target.value }))}
-                />
-                <input
-                  className="admin-input"
-                  placeholder="Email"
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer((c) => ({ ...c, email: e.target.value }))}
-                />
-                <input
-                  className="admin-input"
-                  placeholder="Password"
-                  type="password"
-                  value={newCustomer.password}
-                  onChange={(e) => setNewCustomer((c) => ({ ...c, password: e.target.value }))}
-                />
-                <input
-                  className="admin-input"
-                  placeholder="Mobile (optional)"
-                  value={newCustomer.mobile}
-                  onChange={(e) => setNewCustomer((c) => ({ ...c, mobile: e.target.value }))}
-                />
-                <button
-                  type="button"
-                  className="admin-btn admin-btn-inline"
-                  onClick={async () => {
-                    try {
-                      await adminFetch('/api/admin/customers', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                          fullName: newCustomer.fullName,
-                          email: newCustomer.email,
-                          password: newCustomer.password,
-                          ...(newCustomer.mobile ? { mobile: newCustomer.mobile } : {})
-                        })
-                      })
-                      setNewCustomer({ fullName: '', email: '', password: '', mobile: '' })
-                      await refreshCustomers()
-                    } catch (e) {
-                      alert(e instanceof Error ? e.message : 'Failed')
-                    }
-                  }}
-                >
-                  Add customer
+              <div className="admin-form-row" style={{ justifyContent: 'flex-end' }}>
+                <button type="button" className="admin-btn admin-btn-inline" onClick={() => setShowAddCustomerModal(true)}>
+                  Add
                 </button>
               </div>
               <div className="admin-table-wrap">
@@ -256,7 +243,7 @@ export default function App() {
                     <tr>
                       <th>Name</th>
                       <th>Email</th>
-                      <th />
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -265,23 +252,30 @@ export default function App() {
                         <td>{c.fullName}</td>
                         <td>{c.email}</td>
                         <td>
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn-danger"
-                            onClick={async () => {
-                              if (!confirm(`Delete customer ${c.email}?`)) return
-                              try {
-                                await adminFetch(`/api/admin/customers/${encodeURIComponent(c.email)}`, {
-                                  method: 'DELETE'
-                                })
-                                await refreshCustomers()
-                              } catch (e) {
-                                alert(e instanceof Error ? e.message : 'Failed')
-                              }
-                            }}
-                          >
-                            Delete
-                          </button>
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <IconEditButton
+                              label={`Edit customer ${c.email}`}
+                              onClick={() => {
+                                setEditingCustomer({ id: c.id, fullName: c.fullName, email: c.email })
+                                setEditingCustomerMobile('')
+                                setEditingCustomerPassword('')
+                              }}
+                            />
+                            <IconDeleteButton
+                              label={`Delete customer ${c.email}`}
+                              onClick={async () => {
+                                if (!confirm(`Delete customer ${c.email}?`)) return
+                                try {
+                                  await adminFetch(`/api/admin/customers/${encodeURIComponent(c.email)}`, {
+                                    method: 'DELETE'
+                                  })
+                                  await refreshCustomers()
+                                } catch (e) {
+                                  alert(e instanceof Error ? e.message : 'Failed')
+                                }
+                              }}
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -362,9 +356,8 @@ export default function App() {
                           )}
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn-danger"
+                          <IconDeleteButton
+                            label={`Remove driver ${d.email}`}
                             onClick={async () => {
                               if (!confirm(`Remove driver ${d.email}?`)) return
                               try {
@@ -376,9 +369,7 @@ export default function App() {
                                 alert(e instanceof Error ? e.message : 'Failed')
                               }
                             }}
-                          >
-                            Remove
-                          </button>
+                          />
                         </td>
                       </tr>
                     ))}
@@ -390,7 +381,145 @@ export default function App() {
 
           {page === 'deliveries' ? (
             <>
-              <h2 style={{ marginTop: 0 }}>Deliveries</h2>
+              <h2 style={{ marginTop: 0 }}>Orders & delivery</h2>
+              <p style={{ color: 'var(--admin-muted)', maxWidth: 720 }}>
+                The delivery app loads the same <strong>Zoho Books sales orders</strong> as stops here. Creating or
+                updating orders in Zoho (or below) updates what drivers see. Line items should use Zoho{' '}
+                <strong>item IDs</strong> from your catalog so challans and stock sync work.
+              </p>
+
+              <h3 style={{ marginBottom: 8 }}>Create sales order</h3>
+              <div className="admin-form-row" style={{ flexDirection: 'column', alignItems: 'stretch', maxWidth: 640 }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--admin-muted)' }}>Zoho customer</label>
+                <select
+                  className="admin-input"
+                  value={orderCustomerId}
+                  onChange={(e) => setOrderCustomerId(e.target.value)}
+                  style={{ marginBottom: 8 }}
+                >
+                  <option value="">Select customer…</option>
+                  {zohoContacts.map((c) => (
+                    <option key={String(c.contact_id)} value={String(c.contact_id ?? '')}>
+                      {c.contact_name || c.email || c.contact_id} ({c.email || 'no email'})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="admin-input"
+                  placeholder="Reference (optional, e.g. WEB-1024)"
+                  value={orderRef}
+                  onChange={(e) => setOrderRef(e.target.value)}
+                  style={{ marginBottom: 8 }}
+                />
+                {orderLines.map((line, idx) => (
+                  <div key={idx} className="admin-form-row" style={{ width: '100%' }}>
+                    <select
+                      className="admin-input"
+                      style={{ flex: 2, minWidth: 200 }}
+                      value={line.item_id}
+                      onChange={(e) => {
+                        const itemId = e.target.value
+                        const it = orderItems.find((x) => String(x.item_id) === itemId)
+                        const rate = it?.rate != null ? String(it.rate) : line.rate
+                        setOrderLines((rows) =>
+                          rows.map((r, i) => (i === idx ? { ...r, item_id: itemId, rate } : r))
+                        )
+                      }}
+                    >
+                      <option value="">Item…</option>
+                      {orderItems.map((it) => (
+                        <option key={String(it.item_id)} value={String(it.item_id ?? '')}>
+                          {String(it.name ?? it.item_id)} — {String(it.rate ?? '')}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="admin-input"
+                      style={{ width: 80 }}
+                      type="number"
+                      min={1}
+                      placeholder="Qty"
+                      value={line.quantity}
+                      onChange={(e) =>
+                        setOrderLines((rows) =>
+                          rows.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r))
+                        )
+                      }
+                    />
+                    <input
+                      className="admin-input"
+                      style={{ width: 100 }}
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Rate"
+                      value={line.rate}
+                      onChange={(e) =>
+                        setOrderLines((rows) =>
+                          rows.map((r, i) => (i === idx ? { ...r, rate: e.target.value } : r))
+                        )
+                      }
+                    />
+                    {orderLines.length > 1 ? (
+                      <IconDeleteButton
+                        label="Remove line"
+                        onClick={() => setOrderLines((rows) => rows.filter((_, i) => i !== idx))}
+                      />
+                    ) : null}
+                  </div>
+                ))}
+                <div className="admin-form-row">
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-inline"
+                    style={{ background: '#444' }}
+                    onClick={() => setOrderLines((rows) => [...rows, { item_id: '', quantity: '1', rate: '' }])}
+                  >
+                    Add line
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-inline"
+                    onClick={async () => {
+                      if (!orderCustomerId) {
+                        alert('Choose a Zoho customer')
+                        return
+                      }
+                      const lines = orderLines
+                        .filter((l) => l.item_id)
+                        .map((l) => ({
+                          item_id: l.item_id,
+                          quantity: Number(l.quantity) || 1,
+                          rate: Number(l.rate) || 0
+                        }))
+                      if (lines.length === 0) {
+                        alert('Add at least one line with an item')
+                        return
+                      }
+                      try {
+                        await adminFetch('/api/admin/sales-orders', {
+                          method: 'POST',
+                          body: JSON.stringify({
+                            customer_id: orderCustomerId,
+                            ...(orderRef.trim() ? { reference_number: orderRef.trim() } : {}),
+                            line_items: lines
+                          })
+                        })
+                        setOrderRef('')
+                        setOrderLines([{ item_id: '', quantity: '1', rate: '' }])
+                        await refreshDeliveries()
+                        alert('Sales order created in Zoho Books')
+                      } catch (e) {
+                        alert(e instanceof Error ? e.message : 'Failed')
+                      }
+                    }}
+                  >
+                    Create in Zoho
+                  </button>
+                </div>
+              </div>
+
+              <h3 style={{ marginTop: 28, marginBottom: 8 }}>Driver view (stops)</h3>
               <div className="admin-table-wrap">
                 <table className="admin-table">
                   <thead>
@@ -413,28 +542,33 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
-            </>
-          ) : null}
 
-          {page === 'products' ? (
-            <>
-              <h2 style={{ marginTop: 0 }}>Products (Zoho items)</h2>
-              <p style={{ color: 'var(--admin-muted)' }}>Read-only list in v1 UI; use Zoho Books or API for edits.</p>
+              <h3 style={{ marginTop: 28, marginBottom: 8 }}>Sales orders (Zoho)</h3>
+              <p style={{ color: 'var(--admin-muted)', fontSize: '0.875rem' }}>
+                Edit status or details in Zoho Books, or use <code>PUT /api/admin/sales-orders/:id</code> with a raw
+                Zoho payload for advanced updates.
+              </p>
               <div className="admin-table-wrap">
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>SKU</th>
-                      <th>Rate</th>
+                      <th>Number</th>
+                      <th>Customer</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                      <th>Total</th>
+                      <th>ID</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((it) => (
-                      <tr key={String(it.item_id ?? it.name)}>
-                        <td>{String(it.name ?? '')}</td>
-                        <td>{String(it.sku ?? '')}</td>
-                        <td>{String(it.rate ?? '')}</td>
+                    {salesOrdersRaw.map((so) => (
+                      <tr key={String(so.salesorder_id)}>
+                        <td>{String(so.salesorder_number || so.reference_number || '—')}</td>
+                        <td>{String(so.customer_name || '—')}</td>
+                        <td>{String(so.date || '—')}</td>
+                        <td>{String(so.status || '—')}</td>
+                        <td>{so.total != null ? String(so.total) : '—'}</td>
+                        <td style={{ fontSize: '0.75rem' }}>{String(so.salesorder_id)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -442,6 +576,8 @@ export default function App() {
               </div>
             </>
           ) : null}
+
+          {page === 'products' ? <ProductsSection /> : null}
 
           {page === 'settings' ? (
             <>
@@ -455,6 +591,150 @@ export default function App() {
                 confirmation.
               </p>
             </>
+          ) : null}
+
+          {showAddCustomerModal ? (
+            <div
+              className="admin-modal-backdrop"
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowAddCustomerModal(false)
+              }}
+            >
+              <div className="admin-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
+                <h3 className="admin-modal__title">Add customer</h3>
+                <input
+                  className="admin-input"
+                  placeholder="Full name"
+                  value={newCustomer.fullName}
+                  onChange={(e) => setNewCustomer((c) => ({ ...c, fullName: e.target.value }))}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Email"
+                  type="email"
+                  value={newCustomer.email}
+                  onChange={(e) => setNewCustomer((c) => ({ ...c, email: e.target.value }))}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Password"
+                  type="password"
+                  value={newCustomer.password}
+                  onChange={(e) => setNewCustomer((c) => ({ ...c, password: e.target.value }))}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Mobile (optional)"
+                  value={newCustomer.mobile}
+                  onChange={(e) => setNewCustomer((c) => ({ ...c, mobile: e.target.value }))}
+                />
+                <div className="admin-modal__footer">
+                  <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setShowAddCustomerModal(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-inline"
+                    onClick={async () => {
+                      try {
+                        await adminFetch('/api/admin/customers', {
+                          method: 'POST',
+                          body: JSON.stringify({
+                            fullName: newCustomer.fullName,
+                            email: newCustomer.email,
+                            password: newCustomer.password,
+                            ...(newCustomer.mobile ? { mobile: newCustomer.mobile } : {})
+                          })
+                        })
+                        setNewCustomer({ fullName: '', email: '', password: '', mobile: '' })
+                        setShowAddCustomerModal(false)
+                        await refreshCustomers()
+                      } catch (e) {
+                        alert(e instanceof Error ? e.message : 'Failed')
+                      }
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {editingCustomer ? (
+            <div
+              className="admin-modal-backdrop"
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setEditingCustomer(null)
+              }}
+            >
+              <div className="admin-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
+                <h3 className="admin-modal__title">Edit customer</h3>
+                <input
+                  className="admin-input"
+                  placeholder="Full name"
+                  value={editingCustomer.fullName}
+                  onChange={(e) => setEditingCustomer((c) => (c ? { ...c, fullName: e.target.value } : c))}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Email"
+                  type="email"
+                  value={editingCustomer.email}
+                  onChange={(e) => setEditingCustomer((c) => (c ? { ...c, email: e.target.value } : c))}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="New password (optional)"
+                  type="password"
+                  value={editingCustomerPassword}
+                  onChange={(e) => setEditingCustomerPassword(e.target.value)}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Mobile (optional)"
+                  value={editingCustomerMobile}
+                  onChange={(e) => setEditingCustomerMobile(e.target.value)}
+                />
+                <div className="admin-modal__footer">
+                  <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setEditingCustomer(null)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-inline"
+                    onClick={async () => {
+                      const original = customers.find((c) => c.id === editingCustomer.id)
+                      if (!original) {
+                        alert('Customer not found in current list')
+                        return
+                      }
+                      try {
+                        await adminFetch(`/api/admin/customers/${encodeURIComponent(original.email)}`, {
+                          method: 'PUT',
+                          body: JSON.stringify({
+                            fullName: editingCustomer.fullName,
+                            email: editingCustomer.email,
+                            ...(editingCustomerPassword ? { password: editingCustomerPassword } : {}),
+                            ...(editingCustomerMobile ? { mobile: editingCustomerMobile } : {})
+                          })
+                        })
+                        setEditingCustomer(null)
+                        setEditingCustomerMobile('')
+                        setEditingCustomerPassword('')
+                        await refreshCustomers()
+                      } catch (e) {
+                        alert(e instanceof Error ? e.message : 'Failed')
+                      }
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : null}
         </main>
       </div>
