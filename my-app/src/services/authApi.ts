@@ -8,9 +8,10 @@ export type AuthUser = {
 
 const API_BASE_URL_CANDIDATES = getApiBaseCandidates()
 
-type AuthApiResponse = {
+type LoginResponse = {
   message: string
   user: AuthUser
+  token?: string
 }
 
 /** Thrown for 4xx responses so we do not fall back to another API base (wrong password vs wrong host). */
@@ -33,7 +34,7 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
   }
 }
 
-type ParsedBody = { message?: string; user?: AuthUser }
+type ParsedBody = { message?: string; user?: AuthUser; token?: string }
 
 function parseJsonBody(text: string): ParsedBody {
   if (!text.trim()) return {}
@@ -44,7 +45,7 @@ function parseJsonBody(text: string): ParsedBody {
   }
 }
 
-async function authRequest(path: string, payload: Record<string, string>): Promise<AuthApiResponse> {
+async function authRequest(path: string, payload: Record<string, string>): Promise<LoginResponse> {
   logApiCandidatesOnce(API_BASE_URL_CANDIDATES)
   let lastError: unknown = null
 
@@ -61,7 +62,6 @@ async function authRequest(path: string, payload: Record<string, string>): Promi
 
       if (!response.ok) {
         const msg = data.message || `Request failed with status ${response.status}`
-        // Validation / auth failures apply to this server — do not try another base URL.
         if (response.status >= 400 && response.status < 500) {
           throw new AuthClientError(msg)
         }
@@ -74,7 +74,8 @@ async function authRequest(path: string, payload: Record<string, string>): Promi
 
       return {
         message: data.message || 'OK',
-        user: data.user
+        user: data.user,
+        token: data.token
       }
     } catch (error) {
       if (error instanceof AuthClientError) {
@@ -102,10 +103,25 @@ async function authRequest(path: string, payload: Record<string, string>): Promi
   )
 }
 
-export async function loginCustomer(payload: { email: string; password: string }) {
+export async function loginCustomer(payload: { email: string; password: string }): Promise<LoginResponse> {
   return authRequest('/api/auth/login', payload)
 }
 
-export async function signupCustomer(payload: { fullName: string; email: string; password: string }) {
-  return authRequest('/api/auth/signup', payload)
+export async function fetchAuthMe(token: string): Promise<AuthUser | null> {
+  logApiCandidatesOnce(API_BASE_URL_CANDIDATES)
+  for (const baseUrl of API_BASE_URL_CANDIDATES) {
+    try {
+      const url = `${baseUrl.replace(/\/$/, '')}/api/auth/me`
+      const response = await fetchWithTimeout(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const text = await response.text()
+      const data = parseJsonBody(text)
+      if (!response.ok) return null
+      return data.user ?? null
+    } catch {
+      /* try next base */
+    }
+  }
+  return null
 }

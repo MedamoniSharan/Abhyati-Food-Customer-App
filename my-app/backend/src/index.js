@@ -1,6 +1,8 @@
 import cors from 'cors'
 import express from 'express'
 import { authRoutes } from './routes/authRoutes.js'
+import { adminRoutes } from './routes/adminRoutes.js'
+import { deliveryAuthRoutes } from './routes/deliveryAuthRoutes.js'
 import { env } from './config/env.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { healthRoutes } from './routes/healthRoutes.js'
@@ -17,6 +19,8 @@ app.use(express.json({ limit: '1mb' }))
 
 app.use('/health', healthRoutes)
 app.use('/api/auth', authRoutes)
+app.use('/api/admin', adminRoutes)
+app.use('/api/delivery', deliveryAuthRoutes)
 app.use('/api/items', itemImageRoutes)
 app.use('/api/zoho', zohoRoutes)
 

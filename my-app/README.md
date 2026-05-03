@@ -11,17 +11,16 @@ npm run dev
 
 ## Admin dashboard (separate React website)
 
-- Path: `admin-dashboard/`
+Path: [`admin-dashboard/`](admin-dashboard/). Runs on **port 5174** with a Vite proxy to the backend (`/api` → `http://localhost:4000`).
 
 ```bash
-cd admin-dashboard
-npm install
-npm run dev
+npm run admin:dev
+# or: cd admin-dashboard && npm install && npm run dev
 ```
 
-Then open:
+Open `http://localhost:5174` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from [`backend/.env.example`](backend/.env.example) (defaults are `admin@example.com` / `adminadmin` until you change them).
 
-`http://localhost:5173`
+The dashboard manages **customers** (Zoho customer + app login), **drivers** (Zoho contact + delivery login), **deliveries** (read-only from Zoho sales orders), and a **KPI overview**. Admin actions are appended to `backend/data/admin-audit.jsonl`.
 
 ## Backend setup (Zoho Books)
 
@@ -36,7 +35,7 @@ Backend runs at `http://localhost:4000` by default.
 
 ### Test customer login (seeded on first backend start)
 
-After `npm run dev` in `backend/`, a default customer is created if missing (see `AUTH_DEFAULT_*` in `.env.example`). **Delivery driver** sign-in in the app does not call the API: use **Driver sign in** and tap **Log In** (email/password fields are optional for local UI demo).
+After `npm run dev` in `backend/`, a default customer is created if missing (see `AUTH_DEFAULT_*` in `.env.example`). **Self-service signup is disabled**; create customers from the admin dashboard. **Delivery drivers** sign in with email/password against `POST /api/delivery/login` after an admin creates them (Zoho contact + driver record).
 
 ### Required backend env values
 
@@ -45,6 +44,9 @@ After `npm run dev` in `backend/`, a default customer is created if missing (see
 - `ZOHO_REFRESH_TOKEN`
 - `ZOHO_REGION`
 - `ZOHO_ORGANIZATION_ID` (optional; auto-selects first org if omitted)
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `JWT_SECRET` (admin dashboard + customer/driver JWTs)
+- `ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID` (optional; when set, delivery POD reduces stock via Zoho inventory adjustments)
+- `DRIVER_ZOHO_CONTACT_TYPE` (`vendor` or `customer`) for new driver contacts in Zoho Books
 
 ## Available backend APIs
 

@@ -123,3 +123,21 @@ export function loginCustomerUser({ email, password }) {
 
   return toPublicUser(user)
 }
+
+export function listCustomerUsers() {
+  return [...usersByEmail.values()].map(toPublicUser)
+}
+
+export function getCustomerUserByEmail(email) {
+  const normalizedEmail = normalizeEmail(email)
+  const user = usersByEmail.get(normalizedEmail)
+  return user ? toPublicUser(user) : null
+}
+
+export function deleteCustomerUserByEmail(email) {
+  const normalizedEmail = normalizeEmail(email)
+  if (!usersByEmail.has(normalizedEmail)) return false
+  usersByEmail.delete(normalizedEmail)
+  persistUsers()
+  return true
+}

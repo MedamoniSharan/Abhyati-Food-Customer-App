@@ -10,8 +10,9 @@ import { OrdersScreen } from './screens/OrdersScreen'
 import { ProductDetailsScreen } from './screens/ProductDetailsScreen'
 import type { CartItem, Order, Product, Screen } from './types/app'
 import { fetchZohoItemsPage, getBackendOrders } from './services/backendApi'
+import { fetchAuthMe } from './services/authApi'
 import { checkBackendReachable } from './utils/backendHealth'
-import { clearSignedIn, readSignedIn, writeSignedIn } from './utils/authSession'
+import { clearSignedIn, readAuthToken, readSignedIn, writeSignedIn } from './utils/authSession'
 import { matchOrderToProduct } from './utils/orders'
 
 function App() {
@@ -53,6 +54,31 @@ function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!readSignedIn()) return
+    const token = readAuthToken()
+    if (!token) {
+      clearSignedIn()
+      setIsAuthenticated(false)
+      return
+    }
+    let cancelled = false
+    void fetchAuthMe(token).then((user) => {
+      if (cancelled) return
+      if (!user) {
+        clearSignedIn()
+        setIsAuthenticated(false)
+        showToast('Your session expired or the account was removed.', { variant: 'info' })
+        return
+      }
+      writeSignedIn(user, token)
+      setIsAuthenticated(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [showToast])
 
   const mergeDedupeProducts = useCallback((existing: Product[], incoming: Product[]) => {
     const seen = new Set(existing.map((p) => p.id))
@@ -324,8 +350,8 @@ function App() {
       ) : null}
       {!isAuthenticated ? (
         <AuthScreen
-          onAuthenticated={({ message, user }) => {
-            writeSignedIn(user)
+          onAuthenticated={({ message, user, token }) => {
+            writeSignedIn(user, token)
             setIsAuthenticated(true)
             showToast(message, { variant: 'success' })
           }}

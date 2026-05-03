@@ -92,6 +92,21 @@ export async function createModule(modulePath, payload, query = {}) {
   })
 }
 
+export async function updateModule(modulePath, id, payload, query = {}) {
+  const organizationId = await getOrganizationId()
+  return request('put', `${modulePath}/${encodeURIComponent(id)}`, {
+    params: { organization_id: organizationId, ...query },
+    data: payload
+  })
+}
+
+export async function deleteModule(modulePath, id, query = {}) {
+  const organizationId = await getOrganizationId()
+  return request('delete', `${modulePath}/${encodeURIComponent(id)}`, {
+    params: { organization_id: organizationId, ...query }
+  })
+}
+
 export async function createInvoiceForOrder(orderPayload) {
   const organizationId = await getOrganizationId()
   const {

@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "backend:dev": "npm --prefix backend run dev",
-    "backend:start": "npm --prefix backend run start"
+    "backend:start": "npm --prefix backend run start",
+    "admin:dev": "npm --prefix admin-dashboard run dev",
+    "admin:build": "npm --prefix admin-dashboard run build"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.1",

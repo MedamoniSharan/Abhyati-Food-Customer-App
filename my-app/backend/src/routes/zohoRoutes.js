@@ -11,6 +11,8 @@ import {
   listModule,
   searchCustomerByEmail
 } from '../services/zohoBooksService.js'
+import { mapDeliveryStopFromSalesOrder } from '../services/zohoDeliveryMap.js'
+import { createInventoryAdjustmentsForDeliveredLines } from '../services/zohoInventoryPodService.js'
 
 const createCustomerSchema = z.object({
   contact_name: z.string().min(1),
@@ -176,60 +178,6 @@ zohoRoutes.post('/sync-order', async (req, res, next) => {
   }
 })
 
-function mapDeliveryStopFromSalesOrder(order, index) {
-  const shipping = order.shipping_address || {}
-  const billing = order.billing_address || {}
-  const cityStateZip = [shipping.city, shipping.state, shipping.zip].filter(Boolean).join(', ')
-  const addressLine1 = shipping.address || billing.address || 'Address unavailable'
-  const addressLine2 = cityStateZip || shipping.country || billing.country || ''
-  const mapsQuery = [addressLine1, addressLine2].filter(Boolean).join(', ')
-  const contactName = shipping.attention || order.customer_name || 'Customer'
-  const amount = Number(order.total) || 0
-  const lineItems = Array.isArray(order.line_items) ? order.line_items : []
-  const status = (order.status || '').toLowerCase()
-  const isNext = index === 0
-
-  return {
-    id: order.salesorder_id,
-    salesorder_id: order.salesorder_id,
-    deliveryNumber: order.salesorder_number || order.reference_number || order.salesorder_id,
-    businessName: order.customer_name || 'Customer',
-    orderId: `Order #${order.salesorder_number || order.salesorder_id}`,
-    amount,
-    paymentLabel: order.payment_terms_label || 'Credit',
-    statusTag: status.includes('deliver') ? 'Delivered' : isNext ? 'Next Stop' : 'Scheduled',
-    timeLabel: order.date || 'Today',
-    isNext,
-    address: [addressLine1, addressLine2].filter(Boolean).join(', '),
-    contactName,
-    contactRole: 'Receiving',
-    initials: contactName
-      .split(' ')
-      .map((part) => part[0] || '')
-      .join('')
-      .slice(0, 2)
-      .toUpperCase(),
-    customerName: order.customer_name || 'Customer',
-    verified: true,
-    addressLine1,
-    addressLine2,
-    mapsQuery,
-    phone: shipping.phone || billing.phone || '',
-    contactLine: `Main Contact: ${contactName}`,
-    arrivalWindow: order.date || 'Today',
-    driverNote: order.notes || order.terms || 'Handle package with care.',
-    podOrderLabel: `Order #${order.salesorder_number || order.salesorder_id}`,
-    podSubtitle: `${order.customer_name || 'Customer'} • ${lineItems.length} Items`,
-    items: lineItems.map((item) => ({
-      name: item.name || 'Item',
-      sku: item.sku || item.item_id || '',
-      qty: Number(item.quantity) || 1,
-      unit: item.unit || 'unit',
-      image: ''
-    }))
-  }
-}
-
 zohoRoutes.get('/delivery/stops', async (req, res, next) => {
   try {
     const query = genericQuerySchema.parse(req.query)
@@ -261,20 +209,33 @@ zohoRoutes.post('/delivery/stops/:id/confirm', async (req, res, next) => {
     const salesOrderData = await getModuleById('/salesorders', id)
     const salesOrder = salesOrderData.salesorder || salesOrderData
     const lineItems = Array.isArray(salesOrder.line_items) ? salesOrder.line_items : []
-    const challanPayload = {
-      customer_id: salesOrder.customer_id,
-      reference_number: salesOrder.salesorder_number || salesOrder.reference_number || id,
-      notes: payload.notes || `Delivered to ${payload.recipient_name}`,
-      line_items: lineItems.map((item) => ({
+    const challanLines = lineItems
+      .filter((item) => item && item.item_id)
+      .map((item) => ({
         item_id: item.item_id,
         quantity: Number(item.quantity) || 1,
         rate: Number(item.rate) || 0
       }))
+    if (challanLines.length === 0) {
+      const err = new Error(
+        'Cannot create delivery challan: this sales order has no lines with a Zoho item_id. Add items in Zoho Books first.'
+      )
+      err.statusCode = 400
+      throw err
+    }
+    const ref = salesOrder.salesorder_number || salesOrder.reference_number || id
+    const challanPayload = {
+      customer_id: salesOrder.customer_id,
+      reference_number: ref,
+      notes: payload.notes || `Delivered to ${payload.recipient_name}`,
+      line_items: challanLines
     }
     const challan = await createModule('/deliverychallans', challanPayload)
+    const inv = await createInventoryAdjustmentsForDeliveredLines(lineItems, ref)
     res.status(201).json({
       message: 'Delivery confirmed and synced to Zoho Books',
-      delivery_challan: challan.deliverychallan || challan
+      delivery_challan: challan.deliverychallan || challan,
+      inventory_adjustments: inv
     })
   } catch (error) {
     next(error)

@@ -19,7 +19,17 @@ const envSchema = z.object({
   ZOHO_DEFAULT_CURRENCY_CODE: z.string().default('INR'),
   ZOHO_DEFAULT_PAYMENT_TERMS: z.string().default('Due on Receipt'),
   AUTH_DEFAULT_CUSTOMER_EMAIL: z.string().email().default('customer@abhyati.com'),
-  AUTH_DEFAULT_CUSTOMER_PASSWORD: z.string().min(6).default('Abhyati@123')
+  AUTH_DEFAULT_CUSTOMER_PASSWORD: z.string().min(6).default('Abhyati@123'),
+
+  /** Admin dashboard + /api/admin/* (override in production) */
+  ADMIN_EMAIL: z.string().email().default('admin@example.com'),
+  ADMIN_PASSWORD: z.string().min(6).default('adminadmin'),
+  JWT_SECRET: z.string().min(16).default('dev-jwt-secret-change-in-prod-32'),
+
+  DRIVER_ZOHO_CONTACT_TYPE: z.enum(['vendor', 'customer']).default('vendor'),
+
+  /** Chart account id for quantity inventory adjustments (POD stock sync) */
+  ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID: z.string().optional()
 })
 
 const parsed = envSchema.safeParse(process.env)

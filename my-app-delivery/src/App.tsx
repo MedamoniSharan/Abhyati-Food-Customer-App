@@ -35,8 +35,8 @@ function App() {
       ) : null}
       {!isAuthenticated ? (
         <DriverAuthScreen
-          onAuthenticated={({ message, user }) => {
-            writeSignedIn(user)
+          onAuthenticated={({ message, user, token }) => {
+            writeSignedIn(user, token)
             setSessionUser(user)
             setIsAuthenticated(true)
             showToast(message, { variant: 'success' })

@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { useToast } from '../contexts/ToastContext'
-import { loginCustomer, signupCustomer } from '../services/authApi'
+import { loginCustomer } from '../services/authApi'
 import type { AuthUser } from '../services/authApi'
-
-type AuthView = 'welcome' | 'login' | 'signup'
 
 export type AuthSuccessPayload = {
   message: string
   user: AuthUser
+  token: string
 }
 
 type Props = {
@@ -16,8 +15,7 @@ type Props = {
 
 export function AuthScreen({ onAuthenticated }: Props) {
   const { showToast } = useToast()
-  const [view, setView] = useState<AuthView>('welcome')
-  const [fullName, setFullName] = useState('')
+  const [view, setView] = useState<'welcome' | 'login'>('welcome')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -27,14 +25,16 @@ export function AuthScreen({ onAuthenticated }: Props) {
     setLoading(true)
 
     try {
-      if (view === 'signup') {
-        const result = await signupCustomer({ fullName, email, password })
-        onAuthenticated({ message: `Welcome ${result.user.fullName}`, user: result.user })
+      const result = await loginCustomer({ email, password })
+      if (!result.token) {
+        showToast('Server did not return a session token. Update the backend.', { variant: 'error' })
         return
       }
-
-      const result = await loginCustomer({ email, password })
-      onAuthenticated({ message: `Welcome back ${result.user.fullName}`, user: result.user })
+      onAuthenticated({
+        message: `Welcome back ${result.user.fullName}`,
+        user: result.user,
+        token: result.token
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Authentication failed'
       showToast(message, { variant: 'error' })
@@ -53,7 +53,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
           <p className="auth-welcome-hint">Shop and order from our catalog</p>
           <div className="auth-welcome-actions">
             <button type="button" className="auth-primary-btn" onClick={() => setView('login')}>
-              Get started
+              Log in
             </button>
           </div>
         </div>
@@ -66,19 +66,9 @@ export function AuthScreen({ onAuthenticated }: Props) {
       <div className="auth-overlay" />
       <div className="auth-form-card">
         <img src="/app-logo.png" alt="Abhyati food logo" className="auth-logo auth-logo-top" />
-        <h2>{view === 'login' ? 'Welcome Back !' : 'Create Account'}</h2>
-        <p>
-          {view === 'login' ? 'Your world of living colors awaits' : 'Join Abhyati food today'}
-        </p>
+        <h2>Welcome back</h2>
+        <p>Sign in with the account your administrator created.</p>
 
-        {view === 'signup' ? (
-          <input
-            className="auth-input"
-            placeholder="Full Name"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-          />
-        ) : null}
         <input
           className="auth-input"
           placeholder="Email Address"
@@ -93,7 +83,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
             className="auth-input"
             placeholder="Password"
             type={showPassword ? 'text' : 'password'}
-            autoComplete={view === 'signup' ? 'new-password' : 'current-password'}
+            autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
@@ -111,15 +101,11 @@ export function AuthScreen({ onAuthenticated }: Props) {
         </div>
 
         <button type="button" className="auth-primary-btn" onClick={() => void submitAuth()} disabled={loading}>
-          {loading ? 'Please wait...' : view === 'signup' ? 'Create Account' : 'Log In'}
+          {loading ? 'Please wait...' : 'Log In'}
         </button>
 
-        <button
-          type="button"
-          className="auth-link-btn"
-          onClick={() => setView((prev) => (prev === 'login' ? 'signup' : 'login'))}
-        >
-          {view === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Log In'}
+        <button type="button" className="auth-link-btn" onClick={() => setView('welcome')}>
+          Back
         </button>
       </div>
     </section>

@@ -1,4 +1,5 @@
 import { getApiBaseCandidates, logApiCandidatesOnce } from '../config/api'
+import { readDriverToken } from '../utils/authSession'
 
 const API_BASE_URL_CANDIDATES = getApiBaseCandidates()
 
@@ -39,7 +40,10 @@ async function request<T>(path: string): Promise<T> {
   for (const baseUrl of API_BASE_URL_CANDIDATES) {
     try {
       const url = `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
-      const response = await fetch(url)
+      const headers = new Headers()
+      const token = readDriverToken()
+      if (token) headers.set('Authorization', `Bearer ${token}`)
+      const response = await fetch(url, { headers })
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`)
       }
@@ -62,7 +66,10 @@ async function requestWithInit<T>(path: string, init?: RequestInit): Promise<T> 
   for (const baseUrl of API_BASE_URL_CANDIDATES) {
     try {
       const url = `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
-      const response = await fetch(url, init)
+      const headers = new Headers(init?.headers)
+      const token = readDriverToken()
+      if (token) headers.set('Authorization', `Bearer ${token}`)
+      const response = await fetch(url, { ...init, headers })
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`)
       }
