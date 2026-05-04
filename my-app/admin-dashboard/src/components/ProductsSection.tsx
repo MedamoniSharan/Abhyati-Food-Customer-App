@@ -71,6 +71,8 @@ export function ProductsSection() {
   const [isDraggingEditImage, setIsDraggingEditImage] = useState(false)
   const editImageInputRef = useRef<HTMLInputElement>(null)
   const [imageRevByItem, setImageRevByItem] = useState<Record<string, string>>({})
+  const [productsSortAsc, setProductsSortAsc] = useState(true)
+  const [selectedProductIds, setSelectedProductIds] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     setEditProductImage(null)
@@ -132,6 +134,22 @@ export function ProductsSection() {
     const end = (p - 1) * pp + items.length
     return `Showing ${start}–${end}${hasNext ? ' (more on next page)' : ''} · page ${p}`
   }, [page, pageCtx, perPage, items.length, hasNext, loadingCatalog])
+  const sortedItems = useMemo(
+    () =>
+      [...items].sort((a, b) =>
+        productsSortAsc
+          ? String(a.name ?? '').localeCompare(String(b.name ?? ''))
+          : String(b.name ?? '').localeCompare(String(a.name ?? ''))
+      ),
+    [items, productsSortAsc]
+  )
+  const showCatalogSkeleton = loadingCatalog && items.length === 0
+  const skeletonCardCount = Math.max(6, Math.min(perPage, 12))
+  const selectedProducts = useMemo(
+    () => sortedItems.filter((it) => selectedProductIds[String(it.item_id ?? '')]),
+    [sortedItems, selectedProductIds]
+  )
+  const selectedProductsCount = selectedProducts.length
 
   async function refreshAfterMutation() {
     await loadCatalog()
@@ -357,91 +375,75 @@ export function ProductsSection() {
           {loadingCatalog ? <span className="admin-muted">Loading…</span> : <span>{rangeLabel}</span>}
           {catalogError ? <span className="admin-error-inline">{catalogError}</span> : null}
         </div>
+        {view === 'table' ? (
+          <div className="admin-toolbar-meta" style={{ justifyContent: 'space-between' }}>
+            <span className="admin-muted">
+              {selectedProductsCount > 0 ? `${selectedProductsCount} selected` : 'Select rows to edit or delete'}
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <IconEditButton
+                label={selectedProductsCount !== 1 ? 'Select exactly one product to edit' : 'Edit selected product'}
+                disabled={selectedProductsCount !== 1}
+                onClick={() => {
+                  if (selectedProductsCount !== 1) return
+                  setEditingItem(selectedProducts[0])
+                }}
+              />
+              <IconDeleteButton
+                label={selectedProductsCount === 0 ? 'Select products to delete' : 'Delete selected products'}
+                disabled={selectedProductsCount === 0}
+                onClick={async () => {
+                  if (selectedProductsCount === 0) return
+                  const ids = selectedProducts.map((it) => String(it.item_id ?? '')).filter(Boolean)
+                  if (ids.length === 0) return
+                  if (!confirm(`Delete ${ids.length} selected product(s) from Zoho?`)) return
+                  const failures: string[] = []
+                  for (const id of ids) {
+                    try {
+                      await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+                    } catch (e) {
+                      failures.push(`${id}: ${e instanceof Error ? e.message : 'Failed'}`)
+                    }
+                  }
+                  setSelectedProductIds({})
+                  await refreshAfterMutation()
+                  if (failures.length > 0) {
+                    alert(`Deleted with ${failures.length} failure(s):\n${failures.join('\n')}`)
+                  }
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {view === 'grid' ? (
           <div className="admin-product-grid">
-            {items.map((it) => {
-              const id = String(it.item_id ?? '')
-              const name = String(it.name ?? 'Item')
-              return (
-                <article key={id || name} className="admin-product-card">
-                  <div className="admin-product-card__media">
-                    {id ? <ItemThumb itemId={id} label={name} cacheBust={imageRevByItem[id]} /> : null}
-                  </div>
-                  <div className="admin-product-card__body">
-                    <h4 className="admin-product-card__title">{name}</h4>
-                    <p className="admin-product-card__meta">
-                      {String(it.sku || '—')} · {String(it.product_type || '—')}
-                    </p>
-                    <p className="admin-product-card__price">₹ {String(it.rate ?? '—')}</p>
-                    <div className="admin-product-card__actions">
-                      <IconEditButton label={`Edit ${name}`} onClick={() => setEditingItem(it)} />
-                      <IconDeleteButton
-                        label={`Delete ${name}`}
-                        onClick={async () => {
-                          if (!id || !confirm(`Delete “${name}” from Zoho?`)) return
-                          try {
-                            await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
-                            await refreshAfterMutation()
-                          } catch (e) {
-                            alert(e instanceof Error ? e.message : 'Failed')
-                          }
-                        }}
-                      />
+            {showCatalogSkeleton
+              ? Array.from({ length: skeletonCardCount }).map((_, i) => (
+                  <article key={`skeleton-grid-${i}`} className="admin-product-card admin-product-card--skeleton" aria-hidden>
+                    <div className="admin-product-card__media admin-skeleton admin-skeleton--media" />
+                    <div className="admin-product-card__body">
+                      <div className="admin-skeleton admin-skeleton--line admin-skeleton--title" />
+                      <div className="admin-skeleton admin-skeleton--line admin-skeleton--meta" />
+                      <div className="admin-skeleton admin-skeleton--line admin-skeleton--price" />
                     </div>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="admin-table-wrap admin-table-wrap--tight">
-            <table className="admin-table admin-table--products">
-              <thead>
-                <tr>
-                  <th className="admin-th-thumb" scope="col">
-                    Image
-                  </th>
-                  <th>Name</th>
-                  <th>SKU</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Rate</th>
-                  <th>Item ID</th>
-                  <th scope="col" className="admin-th-actions">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it) => {
+                  </article>
+                ))
+              : sortedItems.map((it) => {
                   const id = String(it.item_id ?? '')
-                  const name = String(it.name ?? '')
+                  const name = String(it.name ?? 'Item')
                   return (
-                    <tr key={id || name}>
-                      <td>
-                        <div className="admin-table-thumb-wrap">
-                          {id ? <ItemThumb itemId={id} label={name} cacheBust={imageRevByItem[id]} /> : null}
-                        </div>
-                      </td>
-                      <td className="admin-td-strong">{name}</td>
-                      <td>{String(it.sku ?? '—')}</td>
-                      <td>{String(it.product_type ?? '—')}</td>
-                      <td>
-                        <span
-                          className={
-                            String(it.status).toLowerCase() === 'active'
-                              ? 'admin-pill'
-                              : 'admin-pill admin-pill--muted'
-                          }
-                        >
-                          {String(it.status ?? '—')}
-                        </span>
-                      </td>
-                      <td>{String(it.rate ?? '—')}</td>
-                      <td className="admin-td-mono">{id}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <article key={id || name} className="admin-product-card">
+                      <div className="admin-product-card__media">
+                        {id ? <ItemThumb itemId={id} label={name} cacheBust={imageRevByItem[id]} /> : null}
+                      </div>
+                      <div className="admin-product-card__body">
+                        <h4 className="admin-product-card__title">{name}</h4>
+                        <p className="admin-product-card__meta">
+                          {String(it.sku || '—')} · {String(it.product_type || '—')}
+                        </p>
+                        <p className="admin-product-card__price">₹ {String(it.rate ?? '—')}</p>
+                        <div className="admin-product-card__actions">
                           <IconEditButton label={`Edit ${name}`} onClick={() => setEditingItem(it)} />
                           <IconDeleteButton
                             label={`Delete ${name}`}
@@ -456,10 +458,113 @@ export function ProductsSection() {
                             }}
                           />
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+                    </article>
                   )
                 })}
+          </div>
+        ) : (
+          <div className="admin-table-wrap admin-table-wrap--tight">
+            <table className="admin-table admin-table--products">
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={sortedItems.length > 0 && sortedItems.every((it) => selectedProductIds[String(it.item_id ?? '')])}
+                      onChange={(e) =>
+                        setSelectedProductIds(() => {
+                          const next: Record<string, boolean> = {}
+                          for (const it of sortedItems) next[String(it.item_id ?? '')] = e.target.checked
+                          return next
+                        })
+                      }
+                    />
+                  </th>
+                  <th className="admin-th-thumb" scope="col">
+                    Image
+                  </th>
+                  <th className="admin-th-sortable" onClick={() => setProductsSortAsc((v) => !v)} title="Sort by name">
+                    Name {productsSortAsc ? '▲' : '▼'}
+                  </th>
+                  <th>SKU</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Rate</th>
+                  <th>Item ID</th>
+                  <th scope="col" className="admin-th-actions">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {showCatalogSkeleton
+                  ? Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={`skeleton-table-${i}`} aria-hidden>
+                        <td><div className="admin-skeleton admin-skeleton--cell" /></td>
+                        <td><div className="admin-skeleton admin-skeleton--thumb-cell" /></td>
+                        <td><div className="admin-skeleton admin-skeleton--line" /></td>
+                        <td><div className="admin-skeleton admin-skeleton--line" /></td>
+                        <td><div className="admin-skeleton admin-skeleton--line" /></td>
+                        <td><div className="admin-skeleton admin-skeleton--pill" /></td>
+                        <td><div className="admin-skeleton admin-skeleton--line" /></td>
+                        <td><div className="admin-skeleton admin-skeleton--line" /></td>
+                        <td><div className="admin-skeleton admin-skeleton--line" /></td>
+                      </tr>
+                    ))
+                  : sortedItems.map((it) => {
+                      const id = String(it.item_id ?? '')
+                      const name = String(it.name ?? '')
+                      return (
+                        <tr key={id || name}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={!!selectedProductIds[id]}
+                              onChange={(e) => setSelectedProductIds((prev) => ({ ...prev, [id]: e.target.checked }))}
+                            />
+                          </td>
+                          <td>
+                            <div className="admin-table-thumb-wrap">
+                              {id ? <ItemThumb itemId={id} label={name} cacheBust={imageRevByItem[id]} /> : null}
+                            </div>
+                          </td>
+                          <td className="admin-td-strong">{name}</td>
+                          <td>{String(it.sku ?? '—')}</td>
+                          <td>{String(it.product_type ?? '—')}</td>
+                          <td>
+                            <span
+                              className={
+                                String(it.status).toLowerCase() === 'active'
+                                  ? 'admin-pill'
+                                  : 'admin-pill admin-pill--muted'
+                              }
+                            >
+                              {String(it.status ?? '—')}
+                            </span>
+                          </td>
+                          <td>{String(it.rate ?? '—')}</td>
+                          <td className="admin-td-mono">{id}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <IconEditButton label={`Edit ${name}`} onClick={() => setEditingItem(it)} />
+                              <IconDeleteButton
+                                label={`Delete ${name}`}
+                                onClick={async () => {
+                                  if (!id || !confirm(`Delete “${name}” from Zoho?`)) return
+                                  try {
+                                    await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+                                    await refreshAfterMutation()
+                                  } catch (e) {
+                                    alert(e instanceof Error ? e.message : 'Failed')
+                                  }
+                                }}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
               </tbody>
             </table>
           </div>

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { adminFetch, adminLogin, getAdminToken, setAdminToken } from './adminApi'
 import { IconDeleteButton, IconEditButton } from './components/AdminIconButtons'
 import { ProductsSection } from './components/ProductsSection'
 
 type Page = 'dashboard' | 'customers' | 'drivers' | 'products' | 'deliveries' | 'settings'
 
-type ZohoContactRow = { contact_id?: string; contact_name?: string; email?: string }
+type ZohoContactRow = { contact_id?: string; contact_name?: string; email?: string; mobile?: string; phone?: string }
 type SalesOrderRow = {
   salesorder_id?: string
   salesorder_number?: string
@@ -14,6 +14,19 @@ type SalesOrderRow = {
   date?: string
   status?: string
   total?: number
+}
+
+type ZohoInvoiceRow = {
+  invoice_id?: string
+  invoice_number?: string
+  date?: string
+  invoice_date?: string
+  due_date?: string
+  customer_name?: string
+  status?: string
+  total?: number
+  reference_number?: string
+  salesorder_number?: string
 }
 
 type Overview = {
@@ -32,6 +45,113 @@ type DeliveryRow = {
   customerName: string
   statusTag: string
   amount: number
+}
+
+type DashboardStats = {
+  totalOrders: number
+  totalCustomers: number
+  totalDrivers: number
+  totalDeliveries: number
+  totalRevenue: number
+  currency: string
+}
+
+const TABLE_PAGE_SIZE = 8
+const chartCurrencyFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
+
+function formatCompactCurrency(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0'
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
+  return chartCurrencyFormatter.format(Math.round(value))
+}
+
+function formatMoneyInr(value: number) {
+  if (!Number.isFinite(value)) return '-'
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value)
+}
+
+function startOfLocalDay(d: Date) {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x
+}
+
+function paginateRows<T>(rows: T[], page: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const safePage = Math.min(Math.max(page, 1), totalPages)
+  const start = (safePage - 1) * pageSize
+  return {
+    pageRows: rows.slice(start, start + pageSize),
+    totalPages,
+    safePage
+  }
+}
+
+function SidebarIcon({ kind }: { kind: 'dashboard' | 'customers' | 'drivers' | 'products' | 'deliveries' | 'settings' | 'logout' | 'plus' }) {
+  if (kind === 'plus') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    )
+  }
+  if (kind === 'dashboard') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M3 13h8V3H3zM13 21h8v-6h-8zM13 11h8V3h-8zM3 21h8v-6H3z" />
+      </svg>
+    )
+  }
+  if (kind === 'customers') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="8.5" cy="7" r="3.5" />
+        <path d="M20 8v6M23 11h-6" />
+      </svg>
+    )
+  }
+  if (kind === 'drivers') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <circle cx="8" cy="17" r="2" />
+        <circle cx="17" cy="17" r="2" />
+        <path d="M3 17V6h10l4 4h4v7" />
+      </svg>
+    )
+  }
+  if (kind === 'products') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      </svg>
+    )
+  }
+  if (kind === 'deliveries') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M9 19V6l12-3v13" />
+        <path d="M3 6l12-3" />
+        <path d="M3 6v13l12-3" />
+      </svg>
+    )
+  }
+  if (kind === 'settings') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.08V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 8.4 19.4a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.08-.4H2.9a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.4a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.08V2.9a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15.6 4.6a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.08.4h.09a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z" />
+      </svg>
+    )
+  }
+  return (
+    <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
 }
 
 export default function App() {
@@ -54,13 +174,40 @@ export default function App() {
   const [zohoContacts, setZohoContacts] = useState<ZohoContactRow[]>([])
   const [newCustomer, setNewCustomer] = useState({ fullName: '', email: '', password: '', mobile: '' })
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false)
-  const [editingCustomer, setEditingCustomer] = useState<{ id: string; fullName: string; email: string } | null>(null)
+  const [editingCustomer, setEditingCustomer] = useState<{
+    id?: string
+    contactId?: string
+    fullName: string
+    email: string
+    originalEmail?: string
+  } | null>(null)
   const [editingCustomerMobile, setEditingCustomerMobile] = useState('')
   const [editingCustomerPassword, setEditingCustomerPassword] = useState('')
   const [newDriver, setNewDriver] = useState({ fullName: '', email: '', password: '' })
   const [orderCustomerId, setOrderCustomerId] = useState('')
   const [orderRef, setOrderRef] = useState('')
   const [orderLines, setOrderLines] = useState([{ item_id: '', quantity: '1', rate: '' }])
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
+  const [customersSortAsc, setCustomersSortAsc] = useState(true)
+  const [customersPage, setCustomersPage] = useState(1)
+  const [selectedCustomerEmails, setSelectedCustomerEmails] = useState<Record<string, boolean>>({})
+  const [zohoSortAsc, setZohoSortAsc] = useState(true)
+  const [zohoPage, setZohoPage] = useState(1)
+  const [selectedZohoIds, setSelectedZohoIds] = useState<Record<string, boolean>>({})
+  const [driversSortAsc, setDriversSortAsc] = useState(true)
+  const [driversPage, setDriversPage] = useState(1)
+  const [selectedDriverEmails, setSelectedDriverEmails] = useState<Record<string, boolean>>({})
+  const [deliveriesSortAsc, setDeliveriesSortAsc] = useState(true)
+  const [deliveriesPage, setDeliveriesPage] = useState(1)
+  const [selectedDeliveryIds, setSelectedDeliveryIds] = useState<Record<string, boolean>>({})
+  const [salesOrdersSortAsc, setSalesOrdersSortAsc] = useState(true)
+  const [salesOrdersPage, setSalesOrdersPage] = useState(1)
+  const [selectedSalesOrders, setSelectedSalesOrders] = useState<Record<string, boolean>>({})
+  const [invoicesRaw, setInvoicesRaw] = useState<ZohoInvoiceRow[]>([])
+  const [invoicesSortAsc, setInvoicesSortAsc] = useState(false)
+  const [invoicesPage, setInvoicesPage] = useState(1)
+  const [invoiceAssignDriverEmail, setInvoiceAssignDriverEmail] = useState('')
+  const [assigningInvoiceId, setAssigningInvoiceId] = useState<string | null>(null)
 
   const refreshOverview = useCallback(async () => {
     const o = await adminFetch<Overview>('/api/admin/overview')
@@ -91,19 +238,49 @@ export default function App() {
     }
   }, [])
 
+  const refreshInvoices = useCallback(async () => {
+    const data = await adminFetch<{ invoices?: ZohoInvoiceRow[] }>('/api/admin/invoices')
+    setInvoicesRaw(Array.isArray(data.invoices) ? data.invoices : [])
+  }, [])
+
   const refreshZohoContacts = useCallback(async () => {
     const r = await adminFetch<{ contacts?: ZohoContactRow[] }>('/api/admin/zoho/customer-contacts')
     setZohoContacts(Array.isArray(r.contacts) ? r.contacts : [])
   }, [])
 
+  const refreshDashboardStats = useCallback(async () => {
+    const [ov, cs, ds, del, zc] = await Promise.all([
+      adminFetch<Overview>('/api/admin/overview'),
+      adminFetch<{ customers?: AuthUser[] }>('/api/admin/customers'),
+      adminFetch<{ drivers?: Array<AuthUser> }>('/api/admin/drivers'),
+      adminFetch<{ deliveries?: DeliveryRow[]; salesorders?: SalesOrderRow[] }>('/api/admin/deliveries'),
+      adminFetch<{ contacts?: ZohoContactRow[] }>('/api/admin/zoho/customer-contacts')
+    ])
+    const salesorders = Array.isArray(del.salesorders) ? del.salesorders : []
+    setSalesOrdersRaw(salesorders)
+    const totalRevenue = salesorders.reduce((sum, s) => sum + (Number(s.total) || 0), 0)
+    setDashboardStats({
+      totalOrders: salesorders.length,
+      totalCustomers: Array.isArray(zc.contacts) ? zc.contacts.length : Array.isArray(cs.customers) ? cs.customers.length : 0,
+      totalDrivers: Array.isArray(ds.drivers) ? ds.drivers.length : 0,
+      totalDeliveries: Array.isArray(del.deliveries) ? del.deliveries.length : 0,
+      totalRevenue,
+      currency: ov.currency || 'INR'
+    })
+  }, [])
+
   const loadPageData = useCallback(async () => {
     setLoadErr('')
     try {
-      if (page === 'dashboard') await refreshOverview()
-      if (page === 'customers') await refreshCustomers()
+      if (page === 'dashboard') {
+        await Promise.all([refreshOverview(), refreshDashboardStats()])
+      }
+      if (page === 'customers') {
+        await Promise.all([refreshCustomers(), refreshZohoContacts()])
+      }
       if (page === 'drivers') await refreshDrivers()
       if (page === 'deliveries') {
-        await Promise.all([refreshDeliveries(), refreshZohoContacts()])
+        await Promise.all([refreshDeliveries(), refreshZohoContacts(), refreshDrivers(), refreshInvoices()])
       }
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : 'Failed to load')
@@ -112,12 +289,159 @@ export default function App() {
         setTokenState(null)
       }
     }
-  }, [page, refreshCustomers, refreshDeliveries, refreshDrivers, refreshOverview, refreshZohoContacts])
+  }, [
+    page,
+    refreshCustomers,
+    refreshDashboardStats,
+    refreshDeliveries,
+    refreshDrivers,
+    refreshInvoices,
+    refreshOverview,
+    refreshZohoContacts
+  ])
 
   useEffect(() => {
     if (!token) return
     void loadPageData()
   }, [token, page, loadPageData])
+
+  const sortedCustomers = useMemo(
+    () =>
+      [...customers].sort((a, b) =>
+        customersSortAsc ? a.fullName.localeCompare(b.fullName) : b.fullName.localeCompare(a.fullName)
+      ),
+    [customers, customersSortAsc]
+  )
+  const customersPaged = useMemo(
+    () => paginateRows(sortedCustomers, customersPage, TABLE_PAGE_SIZE),
+    [sortedCustomers, customersPage]
+  )
+  const sortedZohoContacts = useMemo(
+    () =>
+      [...zohoContacts].sort((a, b) =>
+        zohoSortAsc
+          ? String(a.contact_name ?? '').localeCompare(String(b.contact_name ?? ''))
+          : String(b.contact_name ?? '').localeCompare(String(a.contact_name ?? ''))
+      ),
+    [zohoContacts, zohoSortAsc]
+  )
+  const zohoPaged = useMemo(() => paginateRows(sortedZohoContacts, zohoPage, TABLE_PAGE_SIZE), [sortedZohoContacts, zohoPage])
+  const sortedDrivers = useMemo(
+    () =>
+      [...drivers].sort((a, b) =>
+        driversSortAsc ? a.fullName.localeCompare(b.fullName) : b.fullName.localeCompare(a.fullName)
+      ),
+    [drivers, driversSortAsc]
+  )
+  const driversPaged = useMemo(() => paginateRows(sortedDrivers, driversPage, TABLE_PAGE_SIZE), [sortedDrivers, driversPage])
+  const sortedDeliveries = useMemo(
+    () =>
+      [...deliveries].sort((a, b) =>
+        deliveriesSortAsc ? a.customerName.localeCompare(b.customerName) : b.customerName.localeCompare(a.customerName)
+      ),
+    [deliveries, deliveriesSortAsc]
+  )
+  const deliveriesPaged = useMemo(
+    () => paginateRows(sortedDeliveries, deliveriesPage, TABLE_PAGE_SIZE),
+    [sortedDeliveries, deliveriesPage]
+  )
+  const sortedSalesOrders = useMemo(
+    () =>
+      [...salesOrdersRaw].sort((a, b) =>
+        salesOrdersSortAsc
+          ? String(a.customer_name ?? '').localeCompare(String(b.customer_name ?? ''))
+          : String(b.customer_name ?? '').localeCompare(String(a.customer_name ?? ''))
+      ),
+    [salesOrdersRaw, salesOrdersSortAsc]
+  )
+  const salesOrdersPaged = useMemo(
+    () => paginateRows(sortedSalesOrders, salesOrdersPage, TABLE_PAGE_SIZE),
+    [sortedSalesOrders, salesOrdersPage]
+  )
+  const sortedInvoices = useMemo(
+    () =>
+      [...invoicesRaw].sort((a, b) => {
+        const ad = String(a.date ?? a.invoice_date ?? '')
+        const bd = String(b.date ?? b.invoice_date ?? '')
+        const da = ad.localeCompare(bd)
+        return invoicesSortAsc ? da : -da
+      }),
+    [invoicesRaw, invoicesSortAsc]
+  )
+  const invoicesPaged = useMemo(
+    () => paginateRows(sortedInvoices, invoicesPage, TABLE_PAGE_SIZE),
+    [sortedInvoices, invoicesPage]
+  )
+  /** Calendar buckets for the last 7 days (local time) — fits a trend line better than weekday-of-week totals. */
+  const revenueLast7Days = useMemo(() => {
+    const today = startOfLocalDay(new Date())
+    const startDay = new Date(today)
+    startDay.setDate(startDay.getDate() - 6)
+    const rows: { label: string; shortLabel: string; value: number }[] = []
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startDay)
+      d.setDate(startDay.getDate() + i)
+      rows.push({
+        label: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+        shortLabel: d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' }),
+        value: 0
+      })
+    }
+    for (const so of salesOrdersRaw) {
+      const raw = so.date ? new Date(String(so.date)) : null
+      if (!raw || Number.isNaN(raw.getTime())) continue
+      const orderDay = startOfLocalDay(raw)
+      const idx = Math.round((orderDay.getTime() - startDay.getTime()) / 86400000)
+      if (idx >= 0 && idx < 7) rows[idx].value += Number(so.total) || 0
+    }
+    return rows
+  }, [salesOrdersRaw])
+  const revenueChart = useMemo(() => {
+    const width = 640
+    const height = 220
+    const padX = 24
+    const padTop = 20
+    const padBottom = 38
+    const usableW = width - padX * 2
+    const usableH = height - padTop - padBottom
+    const maxValue = Math.max(1, ...revenueLast7Days.map((d) => d.value))
+    const points = revenueLast7Days.map((d, i) => {
+      const x = padX + (i / Math.max(1, revenueLast7Days.length - 1)) * usableW
+      const y = padTop + (1 - d.value / maxValue) * usableH
+      return { ...d, x, y }
+    })
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')
+    const areaPath = `${linePath} L${(padX + usableW).toFixed(2)} ${(height - padBottom).toFixed(2)} L${padX.toFixed(2)} ${(height - padBottom).toFixed(2)} Z`
+    const yTicks = [1, 0.75, 0.5, 0.25].map((n, tickIdx) => {
+      const value = maxValue * n
+      const y = padTop + (1 - n) * usableH
+      return { tickIdx, y, label: formatCompactCurrency(value) }
+    })
+    const totalRevenue = revenueLast7Days.reduce((sum, d) => sum + d.value, 0)
+    const avgRevenue = totalRevenue / Math.max(1, revenueLast7Days.length)
+    const bestDay = revenueLast7Days.reduce(
+      (best, day) => (day.value > best.value ? day : best),
+      revenueLast7Days[0] ?? { label: '-', shortLabel: '-', value: 0 }
+    )
+    return { width, height, points, linePath, areaPath, yTicks, totalRevenue, avgRevenue, bestDay }
+  }, [revenueLast7Days])
+  const statusMix = useMemo(() => {
+    const counts: Record<string, number> = { open: 0, invoiced: 0, paid: 0, other: 0 }
+    for (const so of salesOrdersRaw) {
+      const s = String(so.status ?? '').toLowerCase()
+      if (s.includes('paid')) counts.paid += 1
+      else if (s.includes('invoice')) counts.invoiced += 1
+      else if (s.includes('open') || s.includes('draft')) counts.open += 1
+      else counts.other += 1
+    }
+    const total = Math.max(1, Object.values(counts).reduce((a, b) => a + b, 0))
+    return [
+      { label: 'Open', value: counts.open, pct: Math.round((counts.open / total) * 100) },
+      { label: 'Invoiced', value: counts.invoiced, pct: Math.round((counts.invoiced / total) * 100) },
+      { label: 'Paid', value: counts.paid, pct: Math.round((counts.paid / total) * 100) },
+      { label: 'Other', value: counts.other, pct: Math.round((counts.other / total) * 100) }
+    ]
+  }, [salesOrdersRaw])
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -174,26 +498,42 @@ export default function App() {
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
-        <div className="admin-brand">Abhyati Admin</div>
+        <div className="admin-brand">
+          <div className="admin-brand__logo" aria-hidden>
+            <img src="/admin-logo.png" alt="Abhyati logo" />
+          </div>
+          <div className="admin-brand__text">
+            <strong>Abhyati</strong>
+            <span>Admin Dashboard</span>
+          </div>
+        </div>
         <nav className="admin-nav">
           {(
             [
-              ['dashboard', 'Dashboard'],
-              ['customers', 'Customers'],
-              ['drivers', 'Drivers'],
-              ['products', 'Products'],
-              ['deliveries', 'Orders & delivery'],
-              ['settings', 'Settings']
+              ['dashboard', 'Dashboard', 'dashboard'],
+              ['customers', 'Customers', 'customers'],
+              ['drivers', 'Drivers', 'drivers'],
+              ['products', 'Products', 'products'],
+              ['deliveries', 'Orders & delivery', 'deliveries'],
+              ['settings', 'Settings', 'settings']
             ] as const
-          ).map(([id, label]) => (
+          ).map(([id, label, icon]) => (
             <button key={id} type="button" className={page === id ? 'active' : ''} onClick={() => setPage(id)}>
-              {label}
+              <SidebarIcon kind={icon} />
+              <span>{label}</span>
             </button>
           ))}
         </nav>
+        <div className="admin-sidebar-quick">
+          <button type="button" className="admin-nav-add-btn" onClick={() => setPage('products')}>
+            <SidebarIcon kind="plus" />
+            <span>Add product</span>
+          </button>
+        </div>
         <div className="admin-sidebar-footer">
           <button type="button" onClick={logout}>
-            Log out
+            <SidebarIcon kind="logout" />
+            <span>Log out</span>
           </button>
         </div>
       </aside>
@@ -206,26 +546,144 @@ export default function App() {
           {loadErr ? <div className="admin-error">{loadErr}</div> : null}
 
           {page === 'dashboard' && overview ? (
-            <div className="admin-kpis">
-              <div className="admin-kpi">
-                <h3>Invoices (sample)</h3>
-                <p className="val">{overview.invoiceCount}</p>
+            <>
+              <div className="admin-kpis">
+                <div className="admin-kpi">
+                  <h3>Orders</h3>
+                  <p className="val">{dashboardStats?.totalOrders ?? overview.salesOrderCount}</p>
+                </div>
+                <div className="admin-kpi">
+                  <h3>Customers</h3>
+                  <p className="val">{dashboardStats?.totalCustomers ?? overview.appCustomerCount}</p>
+                </div>
+                <div className="admin-kpi">
+                  <h3>Drivers</h3>
+                  <p className="val">{dashboardStats?.totalDrivers ?? 0}</p>
+                </div>
+                <div className="admin-kpi">
+                  <h3>Deliveries</h3>
+                  <p className="val">{dashboardStats?.totalDeliveries ?? 0}</p>
+                </div>
+                <div className="admin-kpi">
+                  <h3>Revenue</h3>
+                  <p className="val">
+                    {dashboardStats?.currency ?? overview.currency}{' '}
+                    {(dashboardStats?.totalRevenue ?? overview.revenueApprox).toLocaleString(undefined, {
+                      maximumFractionDigits: 0
+                    })}
+                  </p>
+                </div>
               </div>
-              <div className="admin-kpi">
-                <h3>Sales orders</h3>
-                <p className="val">{overview.salesOrderCount}</p>
+              <div className="admin-analytics-grid">
+                <section className="admin-analytics-card">
+                  <h3 className="admin-analytics-card__title">Revenue trend</h3>
+                  <p className="admin-analytics-card__subtitle">
+                    Sales order totals by day for the last 7 days (your local time). Amounts in{' '}
+                    <strong>{dashboardStats?.currency ?? overview.currency}</strong>.
+                  </p>
+                  <div className="admin-chart-card">
+                    <div className="admin-chart-summary">
+                      <div className="admin-chart-pill">
+                        <span>7-day total</span>
+                        <strong>
+                          {dashboardStats?.currency ?? overview.currency} {formatCompactCurrency(revenueChart.totalRevenue)}
+                        </strong>
+                      </div>
+                      <div className="admin-chart-pill">
+                        <span>Daily average</span>
+                        <strong>
+                          {dashboardStats?.currency ?? overview.currency} {formatCompactCurrency(revenueChart.avgRevenue)}
+                        </strong>
+                      </div>
+                      <div className="admin-chart-pill">
+                        <span>Best day</span>
+                        <strong>
+                          {revenueChart.bestDay.label} · {dashboardStats?.currency ?? overview.currency}{' '}
+                          {formatCompactCurrency(revenueChart.bestDay.value)}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="admin-line-chart-wrap">
+                      <svg
+                        className="admin-line-chart"
+                        viewBox={`0 0 ${revenueChart.width} ${revenueChart.height}`}
+                        role="img"
+                        aria-label="Revenue over the last 7 days"
+                      >
+                        {revenueChart.yTicks.map((tick) => (
+                          <g key={tick.tickIdx}>
+                            <line x1="24" x2={revenueChart.width - 24} y1={tick.y} y2={tick.y} className="admin-chart-grid-line" />
+                            <text x="2" y={tick.y + 4} className="admin-chart-y-label">
+                              {tick.label}
+                            </text>
+                          </g>
+                        ))}
+                        <path d={revenueChart.areaPath} className="admin-chart-area" />
+                        <path d={revenueChart.linePath} className="admin-chart-line" />
+                        {revenueChart.points.map((point, pi) => (
+                          <g key={`${point.label}-${pi}`}>
+                            <circle cx={point.x} cy={point.y} r="4" className="admin-chart-dot" />
+                            <text x={point.x} y={revenueChart.height - 12} textAnchor="middle" className="admin-chart-x-label">
+                              {point.shortLabel}
+                            </text>
+                            <title>{`${point.label}: ${chartCurrencyFormatter.format(Math.round(point.value))}`}</title>
+                          </g>
+                        ))}
+                      </svg>
+                    </div>
+                  </div>
+                </section>
+                <section className="admin-analytics-card">
+                  <h3>Order status mix</h3>
+                  <div className="admin-status-chip-row">
+                    {statusMix.map((s) => (
+                      <div key={s.label} className="admin-status-chip">
+                        <span>{s.label}</span>
+                        <strong>{s.pct}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="admin-mix-list">
+                    {statusMix.map((s) => (
+                      <div key={s.label} className="admin-mix-row">
+                        <span>{s.label}</span>
+                        <div className="admin-mix-track">
+                          <div
+                            className={`admin-mix-fill admin-mix-fill--${s.label.toLowerCase()}`}
+                            style={{ width: `${s.pct}%` }}
+                          />
+                        </div>
+                        <strong>{s.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               </div>
-              <div className="admin-kpi">
-                <h3>App customers</h3>
-                <p className="val">{overview.appCustomerCount}</p>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Metric</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Invoices (first page)</td>
+                      <td>{overview.invoiceCount}</td>
+                    </tr>
+                    <tr>
+                      <td>Sales Orders</td>
+                      <td>{overview.salesOrderCount}</td>
+                    </tr>
+                    <tr>
+                      <td>App Customers</td>
+                      <td>{overview.appCustomerCount}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              <div className="admin-kpi">
-                <h3>Revenue (first page sum)</h3>
-                <p className="val">
-                  {overview.currency} {overview.revenueApprox.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </p>
-              </div>
-            </div>
+            </>
           ) : null}
 
           {page === 'customers' ? (
@@ -241,14 +699,45 @@ export default function App() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Name</th>
+                      <th>
+                        <input
+                          type="checkbox"
+                          checked={
+                            customersPaged.pageRows.length > 0 &&
+                            customersPaged.pageRows.every((c) => selectedCustomerEmails[c.email])
+                          }
+                          onChange={(e) =>
+                            setSelectedCustomerEmails((prev) => {
+                              const next = { ...prev }
+                              for (const c of customersPaged.pageRows) next[c.email] = e.target.checked
+                              return next
+                            })
+                          }
+                        />
+                      </th>
+                      <th
+                        className="admin-th-sortable"
+                        onClick={() => setCustomersSortAsc((v) => !v)}
+                        title="Sort by name"
+                      >
+                        Name {customersSortAsc ? '▲' : '▼'}
+                      </th>
                       <th>Email</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.map((c) => (
+                    {customersPaged.pageRows.map((c) => (
                       <tr key={c.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={!!selectedCustomerEmails[c.email]}
+                            onChange={(e) =>
+                              setSelectedCustomerEmails((prev) => ({ ...prev, [c.email]: e.target.checked }))
+                            }
+                          />
+                        </td>
                         <td>{c.fullName}</td>
                         <td>{c.email}</td>
                         <td>
@@ -256,7 +745,12 @@ export default function App() {
                             <IconEditButton
                               label={`Edit customer ${c.email}`}
                               onClick={() => {
-                                setEditingCustomer({ id: c.id, fullName: c.fullName, email: c.email })
+                                setEditingCustomer({
+                                  id: c.id,
+                                  fullName: c.fullName,
+                                  email: c.email,
+                                  originalEmail: c.email
+                                })
                                 setEditingCustomerMobile('')
                                 setEditingCustomerPassword('')
                               }}
@@ -281,6 +775,111 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="admin-table-pagination">
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setCustomersPage((p) => Math.max(1, p - 1))}>
+                  Prev
+                </button>
+                <span>
+                  Page {customersPaged.safePage} / {customersPaged.totalPages}
+                </span>
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  type="button"
+                  onClick={() => setCustomersPage((p) => Math.min(customersPaged.totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+              <h3 style={{ marginTop: 24, marginBottom: 8 }}>Zoho customers</h3>
+              <p style={{ color: 'var(--admin-muted)', fontSize: '0.875rem' }}>
+                These are direct Zoho Books contacts fetched from <code>/api/admin/zoho/customer-contacts</code>.
+              </p>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <input
+                          type="checkbox"
+                          checked={
+                            zohoPaged.pageRows.length > 0 &&
+                            zohoPaged.pageRows.every((z) => selectedZohoIds[String(z.contact_id ?? z.email ?? '')])
+                          }
+                          onChange={(e) =>
+                            setSelectedZohoIds((prev) => {
+                              const next = { ...prev }
+                              for (const z of zohoPaged.pageRows) next[String(z.contact_id ?? z.email ?? '')] = e.target.checked
+                              return next
+                            })
+                          }
+                        />
+                      </th>
+                      <th className="admin-th-sortable" onClick={() => setZohoSortAsc((v) => !v)} title="Sort by name">
+                        Contact {zohoSortAsc ? '▲' : '▼'}
+                      </th>
+                      <th>Email</th>
+                      <th>Mobile</th>
+                      <th>Zoho Contact ID</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {zohoPaged.pageRows.map((z) => (
+                      <tr key={String(z.contact_id ?? z.email)}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={!!selectedZohoIds[String(z.contact_id ?? z.email ?? '')]}
+                            onChange={(e) =>
+                              setSelectedZohoIds((prev) => ({
+                                ...prev,
+                                [String(z.contact_id ?? z.email ?? '')]: e.target.checked
+                              }))
+                            }
+                          />
+                        </td>
+                        <td>{String(z.contact_name ?? '—')}</td>
+                        <td>{String(z.email ?? '—')}</td>
+                        <td>{String(z.mobile ?? z.phone ?? '—')}</td>
+                        <td style={{ fontSize: '0.75rem' }}>{String(z.contact_id ?? '—')}</td>
+                        <td>
+                          <IconEditButton
+                            label={`Edit Zoho customer ${String(z.contact_name ?? z.email ?? z.contact_id ?? '')}`}
+                            onClick={() => {
+                              setEditingCustomer({
+                                contactId: String(z.contact_id ?? ''),
+                                fullName: String(z.contact_name ?? ''),
+                                email: String(z.email ?? ''),
+                                originalEmail: String(z.email ?? '')
+                              })
+                              setEditingCustomerMobile(String(z.mobile ?? z.phone ?? ''))
+                              setEditingCustomerPassword('')
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                    {zohoPaged.pageRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="admin-muted">
+                          No Zoho customer contacts found.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+              <div className="admin-table-pagination">
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setZohoPage((p) => Math.max(1, p - 1))}>
+                  Prev
+                </button>
+                <span>
+                  Page {zohoPaged.safePage} / {zohoPaged.totalPages}
+                </span>
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setZohoPage((p) => Math.min(zohoPaged.totalPages, p + 1))}>
+                  Next
+                </button>
               </div>
             </>
           ) : null}
@@ -335,7 +934,22 @@ export default function App() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Name</th>
+                      <th>
+                        <input
+                          type="checkbox"
+                          checked={driversPaged.pageRows.length > 0 && driversPaged.pageRows.every((d) => selectedDriverEmails[d.email])}
+                          onChange={(e) =>
+                            setSelectedDriverEmails((prev) => {
+                              const next = { ...prev }
+                              for (const d of driversPaged.pageRows) next[d.email] = e.target.checked
+                              return next
+                            })
+                          }
+                        />
+                      </th>
+                      <th className="admin-th-sortable" onClick={() => setDriversSortAsc((v) => !v)} title="Sort by name">
+                        Name {driversSortAsc ? '▲' : '▼'}
+                      </th>
                       <th>Email</th>
                       <th>Zoho ID</th>
                       <th>Status</th>
@@ -343,8 +957,17 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {drivers.map((d) => (
+                    {driversPaged.pageRows.map((d) => (
                       <tr key={d.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={!!selectedDriverEmails[d.email]}
+                            onChange={(e) =>
+                              setSelectedDriverEmails((prev) => ({ ...prev, [d.email]: e.target.checked }))
+                            }
+                          />
+                        </td>
                         <td>{d.fullName}</td>
                         <td>{d.email}</td>
                         <td style={{ fontSize: '0.75rem' }}>{d.zohoContactId}</td>
@@ -376,6 +999,21 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+              <div className="admin-table-pagination">
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setDriversPage((p) => Math.max(1, p - 1))}>
+                  Prev
+                </button>
+                <span>
+                  Page {driversPaged.safePage} / {driversPaged.totalPages}
+                </span>
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  type="button"
+                  onClick={() => setDriversPage((p) => Math.min(driversPaged.totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
             </>
           ) : null}
 
@@ -383,10 +1021,124 @@ export default function App() {
             <>
               <h2 style={{ marginTop: 0 }}>Orders & delivery</h2>
               <p style={{ color: 'var(--admin-muted)', maxWidth: 720 }}>
-                The delivery app loads the same <strong>Zoho Books sales orders</strong> as stops here. Creating or
-                updating orders in Zoho (or below) updates what drivers see. Line items should use Zoho{' '}
-                <strong>item IDs</strong> from your catalog so challans and stock sync work.
+                Assign <strong>Zoho Books invoices</strong> to a driver below; the driver app shows those stops, accepts
+                them, updates status, and uploads a signed-invoice photo (attached to the invoice in Zoho). Sales orders
+                and legacy stops are listed further down. Line items should use Zoho <strong>item IDs</strong> from your
+                catalog so challans and stock sync work.
               </p>
+
+              <h3 style={{ marginTop: 24, marginBottom: 8 }}>Invoices (Zoho Books)</h3>
+              <p style={{ color: 'var(--admin-muted)', fontSize: '0.875rem', maxWidth: 720 }}>
+                Pick a driver, then use <strong>Assign</strong> on a row to create a delivery assignment. The driver sees
+                it in the app, accepts, navigates, and submits proof of delivery.
+              </p>
+              <div className="admin-form-row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: 'var(--admin-muted)' }}>
+                  Driver for assignment
+                  <select
+                    className="admin-input"
+                    style={{ minWidth: 220 }}
+                    value={invoiceAssignDriverEmail}
+                    onChange={(e) => setInvoiceAssignDriverEmail(e.target.value)}
+                  >
+                    <option value="">Select driver…</option>
+                    {drivers
+                      .filter((d) => !d.disabled)
+                      .map((d) => (
+                        <option key={d.email} value={d.email}>
+                          {d.fullName} ({d.email})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void refreshInvoices()}>
+                  Refresh invoices
+                </button>
+              </div>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th className="admin-th-sortable" onClick={() => setInvoicesSortAsc((v) => !v)} title="Sort by date">
+                        Date {invoicesSortAsc ? '▲' : '▼'}
+                      </th>
+                      <th>Invoice #</th>
+                      <th>Order / ref</th>
+                      <th>Customer</th>
+                      <th>Status</th>
+                      <th>Due</th>
+                      <th>Amount</th>
+                      <th>Assign</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoicesPaged.pageRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ color: 'var(--admin-muted)', padding: '16px 12px' }}>
+                          No invoices loaded. Use Refresh or check Zoho Books connection.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {invoicesPaged.pageRows.map((inv) => {
+                      const id = String(inv.invoice_id ?? '')
+                      return (
+                        <tr key={id || inv.invoice_number}>
+                          <td>{inv.date ?? inv.invoice_date ?? '—'}</td>
+                          <td>{inv.invoice_number ?? id}</td>
+                          <td>{inv.salesorder_number ?? inv.reference_number ?? '—'}</td>
+                          <td>{inv.customer_name ?? '—'}</td>
+                          <td>{inv.status ?? '—'}</td>
+                          <td>{inv.due_date ?? '—'}</td>
+                          <td>{formatMoneyInr(Number(inv.total))}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn-inline"
+                              disabled={!id || assigningInvoiceId === id}
+                              onClick={async () => {
+                                if (!invoiceAssignDriverEmail) {
+                                  alert('Choose a driver first')
+                                  return
+                                }
+                                if (!id) return
+                                setAssigningInvoiceId(id)
+                                try {
+                                  await adminFetch('/api/admin/delivery-assignments', {
+                                    method: 'POST',
+                                    body: JSON.stringify({ driver_email: invoiceAssignDriverEmail, invoice_id: id })
+                                  })
+                                  alert('Invoice assigned to driver')
+                                } catch (e) {
+                                  alert(e instanceof Error ? e.message : 'Assign failed')
+                                } finally {
+                                  setAssigningInvoiceId(null)
+                                }
+                              }}
+                            >
+                              {assigningInvoiceId === id ? '…' : 'Assign'}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="admin-table-pagination">
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setInvoicesPage((p) => Math.max(1, p - 1))}>
+                  Prev
+                </button>
+                <span>
+                  Page {invoicesPaged.safePage} / {invoicesPaged.totalPages} ({invoicesRaw.length} invoices)
+                </span>
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  type="button"
+                  onClick={() => setInvoicesPage((p) => Math.min(invoicesPaged.totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
 
               <h3 style={{ marginBottom: 8 }}>Create sales order</h3>
               <div className="admin-form-row" style={{ flexDirection: 'column', alignItems: 'stretch', maxWidth: 640 }}>
@@ -524,15 +1276,40 @@ export default function App() {
                 <table className="admin-table">
                   <thead>
                     <tr>
+                      <th>
+                        <input
+                          type="checkbox"
+                          checked={
+                            deliveriesPaged.pageRows.length > 0 &&
+                            deliveriesPaged.pageRows.every((d) => selectedDeliveryIds[d.id])
+                          }
+                          onChange={(e) =>
+                            setSelectedDeliveryIds((prev) => {
+                              const next = { ...prev }
+                              for (const d of deliveriesPaged.pageRows) next[d.id] = e.target.checked
+                              return next
+                            })
+                          }
+                        />
+                      </th>
                       <th>Order</th>
-                      <th>Customer</th>
+                      <th className="admin-th-sortable" onClick={() => setDeliveriesSortAsc((v) => !v)} title="Sort by name">
+                        Customer {deliveriesSortAsc ? '▲' : '▼'}
+                      </th>
                       <th>Status</th>
                       <th>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {deliveries.map((d) => (
+                    {deliveriesPaged.pageRows.map((d) => (
                       <tr key={d.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={!!selectedDeliveryIds[d.id]}
+                            onChange={(e) => setSelectedDeliveryIds((prev) => ({ ...prev, [d.id]: e.target.checked }))}
+                          />
+                        </td>
                         <td>{d.orderId}</td>
                         <td>{d.customerName}</td>
                         <td>{d.statusTag}</td>
@@ -541,6 +1318,21 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="admin-table-pagination">
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setDeliveriesPage((p) => Math.max(1, p - 1))}>
+                  Prev
+                </button>
+                <span>
+                  Page {deliveriesPaged.safePage} / {deliveriesPaged.totalPages}
+                </span>
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  type="button"
+                  onClick={() => setDeliveriesPage((p) => Math.min(deliveriesPaged.totalPages, p + 1))}
+                >
+                  Next
+                </button>
               </div>
 
               <h3 style={{ marginTop: 28, marginBottom: 8 }}>Sales orders (Zoho)</h3>
@@ -552,8 +1344,26 @@ export default function App() {
                 <table className="admin-table">
                   <thead>
                     <tr>
+                      <th>
+                        <input
+                          type="checkbox"
+                          checked={
+                            salesOrdersPaged.pageRows.length > 0 &&
+                            salesOrdersPaged.pageRows.every((s) => selectedSalesOrders[String(s.salesorder_id ?? '')])
+                          }
+                          onChange={(e) =>
+                            setSelectedSalesOrders((prev) => {
+                              const next = { ...prev }
+                              for (const s of salesOrdersPaged.pageRows) next[String(s.salesorder_id ?? '')] = e.target.checked
+                              return next
+                            })
+                          }
+                        />
+                      </th>
                       <th>Number</th>
-                      <th>Customer</th>
+                      <th className="admin-th-sortable" onClick={() => setSalesOrdersSortAsc((v) => !v)} title="Sort by name">
+                        Customer {salesOrdersSortAsc ? '▲' : '▼'}
+                      </th>
                       <th>Date</th>
                       <th>Status</th>
                       <th>Total</th>
@@ -561,8 +1371,20 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {salesOrdersRaw.map((so) => (
+                    {salesOrdersPaged.pageRows.map((so) => (
                       <tr key={String(so.salesorder_id)}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={!!selectedSalesOrders[String(so.salesorder_id ?? '')]}
+                            onChange={(e) =>
+                              setSelectedSalesOrders((prev) => ({
+                                ...prev,
+                                [String(so.salesorder_id ?? '')]: e.target.checked
+                              }))
+                            }
+                          />
+                        </td>
                         <td>{String(so.salesorder_number || so.reference_number || '—')}</td>
                         <td>{String(so.customer_name || '—')}</td>
                         <td>{String(so.date || '—')}</td>
@@ -573,6 +1395,21 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="admin-table-pagination">
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setSalesOrdersPage((p) => Math.max(1, p - 1))}>
+                  Prev
+                </button>
+                <span>
+                  Page {salesOrdersPaged.safePage} / {salesOrdersPaged.totalPages}
+                </span>
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  type="button"
+                  onClick={() => setSalesOrdersPage((p) => Math.min(salesOrdersPaged.totalPages, p + 1))}
+                >
+                  Next
+                </button>
               </div>
             </>
           ) : null}
@@ -649,7 +1486,7 @@ export default function App() {
                         })
                         setNewCustomer({ fullName: '', email: '', password: '', mobile: '' })
                         setShowAddCustomerModal(false)
-                        await refreshCustomers()
+                        await Promise.all([refreshCustomers(), refreshZohoContacts()])
                       } catch (e) {
                         alert(e instanceof Error ? e.message : 'Failed')
                       }
@@ -698,6 +1535,9 @@ export default function App() {
                   value={editingCustomerMobile}
                   onChange={(e) => setEditingCustomerMobile(e.target.value)}
                 />
+                <p style={{ margin: '0 0 6px', color: 'var(--admin-muted)', fontSize: '0.8rem' }}>
+                  Password updates/creates app login for this customer when email + password are provided.
+                </p>
                 <div className="admin-modal__footer">
                   <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setEditingCustomer(null)}>
                     Cancel
@@ -706,25 +1546,38 @@ export default function App() {
                     type="button"
                     className="admin-btn admin-btn-inline"
                     onClick={async () => {
-                      const original = customers.find((c) => c.id === editingCustomer.id)
-                      if (!original) {
-                        alert('Customer not found in current list')
-                        return
-                      }
                       try {
-                        await adminFetch(`/api/admin/customers/${encodeURIComponent(original.email)}`, {
-                          method: 'PUT',
-                          body: JSON.stringify({
-                            fullName: editingCustomer.fullName,
-                            email: editingCustomer.email,
-                            ...(editingCustomerPassword ? { password: editingCustomerPassword } : {}),
-                            ...(editingCustomerMobile ? { mobile: editingCustomerMobile } : {})
+                        if (editingCustomer.contactId) {
+                          await adminFetch(`/api/admin/customers/contact/${encodeURIComponent(editingCustomer.contactId)}`, {
+                            method: 'PUT',
+                            body: JSON.stringify({
+                              fullName: editingCustomer.fullName,
+                              email: editingCustomer.email || undefined,
+                              mobile: editingCustomerMobile,
+                              ...(editingCustomerPassword ? { password: editingCustomerPassword } : {}),
+                              ...(editingCustomer.originalEmail ? { currentEmail: editingCustomer.originalEmail } : {})
+                            })
                           })
-                        })
+                        } else {
+                          const original = customers.find((c) => c.id === editingCustomer.id)
+                          if (!original) {
+                            alert('Customer not found in current list')
+                            return
+                          }
+                          await adminFetch(`/api/admin/customers/${encodeURIComponent(original.email)}`, {
+                            method: 'PUT',
+                            body: JSON.stringify({
+                              fullName: editingCustomer.fullName,
+                              email: editingCustomer.email,
+                              ...(editingCustomerPassword ? { password: editingCustomerPassword } : {}),
+                              ...(editingCustomerMobile ? { mobile: editingCustomerMobile } : {})
+                            })
+                          })
+                        }
                         setEditingCustomer(null)
                         setEditingCustomerMobile('')
                         setEditingCustomerPassword('')
-                        await refreshCustomers()
+                        await Promise.all([refreshCustomers(), refreshZohoContacts()])
                       } catch (e) {
                         alert(e instanceof Error ? e.message : 'Failed')
                       }

@@ -33,6 +33,16 @@ export type DeliveryStop = {
   items: Array<{ name: string; sku: string; qty: number; unit: string; image: string }>
 }
 
+type DeliveryAssignment = {
+  id: string
+  invoiceId: string
+  invoiceNumber: string
+  customerName: string
+  amount: number
+  address?: string
+  status: string
+}
+
 async function request<T>(path: string): Promise<T> {
   logApiCandidatesOnce(API_BASE_URL_CANDIDATES)
   let lastError: unknown = null
@@ -86,23 +96,83 @@ async function requestWithInit<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 export async function getDeliveryStops(): Promise<DeliveryStop[]> {
-  const response = await request<{ stops?: DeliveryStop[] }>('/api/zoho/delivery/stops')
-  return response.stops || []
+  const response = await request<{ assignments?: DeliveryAssignment[] }>('/api/delivery/assignments')
+  const rows = Array.isArray(response.assignments) ? response.assignments : []
+  const mapped = rows.map((a, rowIdx) => {
+    const st = String(a.status || '').toLowerCase()
+    const statusTag = st === 'assigned' ? 'Assigned' : st === 'accepted' ? 'Accepted' : st === 'in_transit' ? 'In Transit' : 'Delivered'
+    return {
+      id: a.id,
+      salesorder_id: a.invoiceId,
+      deliveryNumber: `INV-${rowIdx + 1}`,
+      businessName: a.customerName || 'Customer',
+      orderId: a.invoiceNumber || a.invoiceId,
+      amount: Number(a.amount) || 0,
+      paymentLabel: 'Credit',
+      statusTag,
+      timeLabel: 'Today',
+      isNext: false,
+      address: a.address || 'Address not available',
+      note: '',
+      contactName: a.customerName || 'Customer',
+      contactRole: 'Invoice recipient',
+      initials: String(a.customerName || 'C')
+        .split(' ')
+        .slice(0, 2)
+        .map((s) => s[0] || '')
+        .join('')
+        .toUpperCase(),
+      customerName: a.customerName || 'Customer',
+      verified: st === 'delivered',
+      addressLine1: a.address || '',
+      addressLine2: '',
+      mapsQuery: a.address || a.customerName || '',
+      phone: '',
+      contactLine: '',
+      arrivalWindow: '',
+      driverNote: '',
+      podOrderLabel: a.invoiceNumber || a.invoiceId,
+      podSubtitle: 'Upload signed invoice photo',
+      items: []
+    } as DeliveryStop
+  })
+  let nextAssigned = false
+  return mapped.map((stop) => {
+    if (stop.statusTag === 'Delivered') return stop
+    if (!nextAssigned) {
+      nextAssigned = true
+      return { ...stop, isNext: true }
+    }
+    return { ...stop, isNext: false }
+  })
 }
 
 export async function getDeliveryStopDetail(stopId: string): Promise<DeliveryStop | null> {
-  try {
-    const response = await request<{ stop?: DeliveryStop }>(`/api/zoho/delivery/stops/${encodeURIComponent(stopId)}`)
-    return response.stop || null
-  } catch {
-    return null
-  }
+  const all = await getDeliveryStops()
+  return all.find((s) => s.id === stopId) || null
 }
 
-export async function confirmDeliveryStop(stopId: string, recipientName: string, notes?: string): Promise<void> {
-  await requestWithInit<{ message: string }>(`/api/zoho/delivery/stops/${encodeURIComponent(stopId)}/confirm`, {
+export async function confirmDeliveryStop(stopId: string, recipientName: string, photo: File, notes?: string): Promise<void> {
+  const form = new FormData()
+  form.append('photo', photo)
+  form.append('recipient_name', recipientName)
+  if (notes) form.append('notes', notes)
+  await requestWithInit<{ message: string }>(`/api/delivery/assignments/${encodeURIComponent(stopId)}/proof`, {
     method: 'POST',
+    body: form
+  })
+}
+
+export async function acceptDeliveryStop(stopId: string): Promise<void> {
+  await requestWithInit<{ message: string }>(`/api/delivery/assignments/${encodeURIComponent(stopId)}/accept`, {
+    method: 'POST'
+  })
+}
+
+export async function updateDeliveryStopStatus(stopId: string, status: 'accepted' | 'in_transit' | 'delivered'): Promise<void> {
+  await requestWithInit<{ message: string }>(`/api/delivery/assignments/${encodeURIComponent(stopId)}/status`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipient_name: recipientName, ...(notes ? { notes } : {}) }),
+    body: JSON.stringify({ status })
   })
 }

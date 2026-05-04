@@ -7,7 +7,7 @@ const INVOICE_PREVIEW =
 type Props = {
   detail: DeliveryStop
   onBack: () => void
-  onConfirm: (recipient: string) => void
+  onConfirm: (recipient: string, photo: File) => void
   onNotify: (message: string) => void
 }
 
@@ -16,6 +16,7 @@ export function ProofOfDeliveryScreen({ detail, onBack, onConfirm, onNotify }: P
   const drawing = useRef(false)
   const last = useRef<{ x: number; y: number } | null>(null)
   const [recipient, setRecipient] = useState('')
+  const [invoicePhoto, setInvoicePhoto] = useState<File | null>(null)
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current
@@ -178,9 +179,25 @@ export function ProofOfDeliveryScreen({ detail, onBack, onConfirm, onNotify }: P
                   pointerEvents: 'auto',
                 }}
               >
-                <button type="button" className="dd-icon-btn" style={{ background: 'rgba(0,0,0,0.45)', color: '#fff' }} onClick={() => onNotify('Gallery')}>
+                <button
+                  type="button"
+                  className="dd-icon-btn"
+                  style={{ background: 'rgba(0,0,0,0.45)', color: '#fff' }}
+                  onClick={() => {
+                    const el = document.getElementById('pod-photo-input') as HTMLInputElement | null
+                    el?.click()
+                  }}
+                >
                   <span className="material-symbols-outlined">image</span>
                 </button>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  style={{ display: 'none' }}
+                  id="pod-photo-input"
+                  onChange={(e) => setInvoicePhoto(e.target.files?.[0] ?? null)}
+                />
                 <button
                   type="button"
                   className="dd-icon-btn"
@@ -193,7 +210,10 @@ export function ProofOfDeliveryScreen({ detail, onBack, onConfirm, onNotify }: P
                     color: '#fff',
                   }}
                   aria-label="Shutter"
-                  onClick={() => onNotify('Photo captured (demo)')}
+                  onClick={() => {
+                    const el = document.getElementById('pod-photo-input') as HTMLInputElement | null
+                    el?.click()
+                  }}
                 >
                   <span style={{ width: 52, height: 52, borderRadius: 999, background: '#fff', display: 'block' }} />
                 </button>
@@ -202,6 +222,9 @@ export function ProofOfDeliveryScreen({ detail, onBack, onConfirm, onNotify }: P
                 </button>
               </div>
             </div>
+            <p style={{ margin: '10px 0 0', color: '#fff', fontSize: '0.78rem' }}>
+              {invoicePhoto ? `Selected: ${invoicePhoto.name}` : 'Capture or select signed invoice photo'}
+            </p>
           </div>
         </section>
 
@@ -263,7 +286,11 @@ export function ProofOfDeliveryScreen({ detail, onBack, onConfirm, onNotify }: P
               onNotify('Please enter recipient name')
               return
             }
-            onConfirm(recipient.trim())
+            if (!invoicePhoto) {
+              onNotify('Please capture signed invoice photo')
+              return
+            }
+            onConfirm(recipient.trim(), invoicePhoto)
           }}
         >
           Confirm Delivery

@@ -107,6 +107,23 @@ export async function deleteModule(modulePath, id, query = {}) {
   })
 }
 
+export async function uploadInvoiceAttachment(invoiceId, { buffer, mimetype, originalname }) {
+  const organizationId = await getOrganizationId()
+  const accessToken = await getZohoAccessToken()
+  const form = new FormData()
+  const blob = new Blob([buffer], { type: mimetype || 'application/octet-stream' })
+  form.append('attachment', blob, originalname || 'proof.jpg')
+
+  const response = await axios({
+    method: 'post',
+    url: `${env.ZOHO_BOOKS_BASE_URL}/invoices/${encodeURIComponent(invoiceId)}/attachment`,
+    headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+    params: { organization_id: organizationId },
+    data: form
+  })
+  return response.data
+}
+
 export async function createInvoiceForOrder(orderPayload) {
   const organizationId = await getOrganizationId()
   const {

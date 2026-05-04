@@ -4,8 +4,12 @@ import { formatInr } from '../../utils/currency'
 
 type Props = {
   stops: DeliveryStop[]
+  /** Delivered count (full history); list may be active-only */
+  completedCount?: number
   loading?: boolean
   onOpenStop: (stopId: string) => void
+  onAcceptStop?: (stopId: string) => void | Promise<void>
+  acceptingId?: string | null
   onBackToDashboard: () => void
   onViewMap: () => void
   onNotify: (message: string) => void
@@ -20,7 +24,17 @@ const WEEK = [
   { day: 'Sat', date: 28 },
 ]
 
-export function AssignedDeliveriesScreen({ stops, loading, onOpenStop, onBackToDashboard, onViewMap, onNotify }: Props) {
+export function AssignedDeliveriesScreen({
+  stops,
+  completedCount = 0,
+  loading,
+  onOpenStop,
+  onAcceptStop,
+  acceptingId,
+  onBackToDashboard,
+  onViewMap,
+  onNotify,
+}: Props) {
   const [selectedDay, setSelectedDay] = useState(23)
 
   return (
@@ -87,7 +101,7 @@ export function AssignedDeliveriesScreen({ stops, loading, onOpenStop, onBackToD
               </span>
               Completed
             </div>
-            <p className="dd-stat-value">{stops.filter((s) => s.statusTag.toLowerCase().includes('deliver')).length}</p>
+            <p className="dd-stat-value">{completedCount}</p>
           </div>
         </div>
 
@@ -157,18 +171,31 @@ export function AssignedDeliveriesScreen({ stops, loading, onOpenStop, onBackToD
                   <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600 }}>{stop.contactName}</p>
                   <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--dd-muted)' }}>{stop.contactRole}</p>
                 </div>
-                {stop.isNext ? (
-                  <button type="button" className="dd-accent-btn" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => onOpenStop(stop.id)}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
-                      play_arrow
-                    </span>
-                    Start
-                  </button>
-                ) : (
-                  <button type="button" className="dd-muted-btn" onClick={() => onOpenStop(stop.id)}>
-                    Details
-                  </button>
-                )}
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  {stop.statusTag === 'Assigned' && onAcceptStop ? (
+                    <button
+                      type="button"
+                      className="dd-accent-btn"
+                      style={{ width: 'auto', padding: '10px 14px' }}
+                      disabled={acceptingId === stop.id}
+                      onClick={() => void onAcceptStop(stop.id)}
+                    >
+                      {acceptingId === stop.id ? '…' : 'Accept'}
+                    </button>
+                  ) : null}
+                  {stop.isNext && stop.statusTag !== 'Assigned' ? (
+                    <button type="button" className="dd-accent-btn" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => onOpenStop(stop.id)}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
+                        play_arrow
+                      </span>
+                      Start
+                    </button>
+                  ) : (
+                    <button type="button" className="dd-muted-btn" onClick={() => onOpenStop(stop.id)}>
+                      Details
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </article>

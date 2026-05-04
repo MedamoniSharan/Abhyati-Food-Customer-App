@@ -29,6 +29,7 @@ import {
 import { signAdminToken } from '../services/jwtService.js'
 import { mapDeliveryStopFromSalesOrder } from '../services/zohoDeliveryMap.js'
 import { uploadItemImageToZoho } from '../services/zohoItemImageService.js'
+import { createAssignment, listAssignments } from '../services/deliveryAssignmentStore.js'
 
 export const adminRoutes = Router()
 
@@ -77,10 +78,23 @@ const updateCustomerBody = z.object({
   mobile: z.string().optional()
 })
 
+const updateZohoCustomerByIdBody = z.object({
+  fullName: z.string().trim().min(2).optional(),
+  email: z.string().email().optional(),
+  mobile: z.string().optional(),
+  password: z.string().min(6).optional(),
+  currentEmail: z.string().email().optional()
+})
+
 const createDriverBody = z.object({
   fullName: z.string().trim().min(2),
   email: z.string().email(),
   password: z.string().min(6)
+})
+
+const assignInvoiceBody = z.object({
+  driver_email: z.string().email(),
+  invoice_id: z.string().min(1)
 })
 
 const emailParam = z.object({
@@ -283,8 +297,94 @@ adminRoutes.put('/customers/:email', async (req, res, next) => {
   }
 })
 
+adminRoutes.put('/customers/contact/:contactId', async (req, res, next) => {
+  try {
+    const contactId = z.string().min(1).parse(req.params.contactId)
+    const body = updateZohoCustomerByIdBody.parse(req.body)
+
+    const zohoPayload = {
+      contact_id: contactId,
+      ...(body.fullName ? { contact_name: body.fullName } : {}),
+      ...(body.email ? { email: body.email } : {}),
+      ...(body.mobile !== undefined ? { mobile: body.mobile } : {})
+    }
+    if (Object.keys(zohoPayload).length > 1) {
+      await updateModule('/contacts', contactId, zohoPayload)
+    }
+
+    const lookupEmail = body.currentEmail || body.email
+    let user = null
+    let loginAction = 'none'
+    if (lookupEmail) {
+      user = updateCustomerUserByEmail(lookupEmail, {
+        fullName: body.fullName,
+        email: body.email,
+        password: body.password
+      })
+      if (user) loginAction = 'updated'
+      else if (body.password && body.email && body.fullName) {
+        user = createCustomerUser({
+          fullName: body.fullName,
+          email: body.email,
+          password: body.password
+        })
+        loginAction = 'created'
+      }
+    }
+
+    appendAdminAudit({
+      action: 'admin_update_customer_contact',
+      meta: { contactId, email: body.email, loginAction }
+    })
+    res.json({ message: 'Customer updated', zohoUpdated: true, loginAction, user })
+  } catch (error) {
+    next(error)
+  }
+})
+
 adminRoutes.get('/drivers', (_req, res) => {
   res.json({ drivers: listDrivers() })
+})
+
+adminRoutes.get('/invoices', async (req, res, next) => {
+  try {
+    const query = z.object({}).passthrough().parse(req.query)
+    const data = await listModule('/invoices', { per_page: 200, ...query })
+    res.json(data)
+  } catch (error) {
+    next(error)
+  }
+})
+
+adminRoutes.get('/delivery-assignments', (_req, res) => {
+  res.json({ assignments: listAssignments() })
+})
+
+adminRoutes.post('/delivery-assignments', async (req, res, next) => {
+  try {
+    const input = assignInvoiceBody.parse(req.body)
+    const driver = getDriverByEmail(input.driver_email)
+    if (!driver) {
+      const err = new Error('Driver not found')
+      err.statusCode = 404
+      throw err
+    }
+    const invoiceData = await getModuleById('/invoices', input.invoice_id)
+    const invoice = invoiceData.invoice || invoiceData
+    const assignment = createAssignment({
+      driverEmail: driver.email,
+      driverName: driver.fullName,
+      invoiceId: String(invoice.invoice_id || input.invoice_id),
+      invoiceNumber: String(invoice.invoice_number || invoice.reference_number || input.invoice_id),
+      customerName: String(invoice.customer_name || ''),
+      amount: Number(invoice.total) || 0,
+      address: String(invoice.billing_address?.address || invoice.shipping_address?.address || '')
+    })
+    appendAdminAudit({ action: 'admin_assign_invoice', meta: { driver: driver.email, invoice: input.invoice_id } })
+    res.status(201).json({ message: 'Invoice assigned to driver', assignment })
+  } catch (error) {
+    next(error)
+  }
 })
 
 adminRoutes.post('/drivers', async (req, res, next) => {

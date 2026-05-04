@@ -4,7 +4,9 @@ import type { DeliveryStop } from '../../services/deliveryBackendApi'
 type Props = {
   detail: DeliveryStop
   onBack: () => void
-  onStartNavigation: () => void
+  onAccept?: () => void | Promise<void>
+  accepting?: boolean
+  onStartNavigation: () => void | Promise<void>
   onOpenProof: () => void
   onOpenAddress: () => void
   onMessage: () => void
@@ -12,7 +14,19 @@ type Props = {
   onNotify: (message: string) => void
 }
 
-export function DeliveryDetailScreen({ detail, onBack, onStartNavigation, onOpenProof, onOpenAddress, onMessage, onCall, onNotify }: Props) {
+export function DeliveryDetailScreen({
+  detail,
+  onBack,
+  onAccept,
+  accepting,
+  onStartNavigation,
+  onOpenProof,
+  onOpenAddress,
+  onMessage,
+  onCall,
+  onNotify,
+}: Props) {
+  const needsAccept = detail.statusTag === 'Assigned'
   return (
     <>
       <header className="dd-header">
@@ -116,11 +130,24 @@ export function DeliveryDetailScreen({ detail, onBack, onStartNavigation, onOpen
         </div>
 
         <div style={{ position: 'sticky', bottom: 72, zIndex: 5, marginBottom: 16 }}>
-          <button type="button" className="dd-accent-btn" onClick={onStartNavigation}>
-            <span className="material-symbols-outlined">navigation</span>
-            Start Navigation
-          </button>
-          <button type="button" className="dd-text-btn" style={{ width: '100%', marginTop: 10, color: 'var(--dd-muted)' }} onClick={onOpenProof}>
+          {needsAccept && onAccept ? (
+            <button type="button" className="dd-accent-btn" disabled={accepting} onClick={() => void onAccept()}>
+              <span className="material-symbols-outlined">check_circle</span>
+              {accepting ? 'Accepting…' : 'Accept delivery'}
+            </button>
+          ) : (
+            <button type="button" className="dd-accent-btn" onClick={() => void onStartNavigation()}>
+              <span className="material-symbols-outlined">navigation</span>
+              Start Navigation
+            </button>
+          )}
+          <button
+            type="button"
+            className="dd-text-btn"
+            style={{ width: '100%', marginTop: 10, color: needsAccept ? '#94a3b8' : 'var(--dd-muted)' }}
+            onClick={onOpenProof}
+            disabled={needsAccept}
+          >
             Proof of delivery
           </button>
         </div>
