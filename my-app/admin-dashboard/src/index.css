@@ -92,6 +92,39 @@ body {
   margin-bottom: 12px;
 }
 
+.admin-page-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 220px;
+  padding: 32px 16px;
+  color: var(--admin-muted);
+}
+
+.admin-page-loader__spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 3px solid var(--admin-border);
+  border-top-color: var(--admin-accent);
+  animation: admin-spin 0.85s linear infinite;
+}
+
+.admin-page-loader__text {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--admin-text);
+}
+
+@keyframes admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .admin-shell {
   display: grid;
   grid-template-columns: 240px 1fr;
@@ -569,6 +602,23 @@ body {
   font-weight: 600;
 }
 
+.admin-products-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.admin-btn-add-product {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  box-shadow: 0 8px 18px rgba(234, 88, 12, 0.24);
+}
+
+.admin-btn-add-product:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
 .admin-form-row--wrap {
   flex-wrap: wrap;
   align-items: flex-end;
@@ -771,6 +821,7 @@ body {
 }
 
 .admin-icon-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -790,9 +841,38 @@ body {
   color: var(--admin-accent);
 }
 
+.admin-icon-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px);
+  background: #111827;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 6px;
+  padding: 6px 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  z-index: 8;
+}
+
+.admin-icon-btn:hover:not(:disabled)::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .admin-icon-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.admin-icon-btn--danger {
+  color: #dc2626;
 }
 
 .admin-icon-btn--danger:hover:not(:disabled) {
@@ -902,6 +982,10 @@ body {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
 }
 
+.admin-modal--wide {
+  max-width: 780px;
+}
+
 .admin-modal__title {
   margin: 0 0 16px;
   font-size: 1.1rem;
@@ -950,26 +1034,32 @@ body {
 }
 
 .admin-dropzone {
-  border: 1px dashed var(--admin-border);
-  border-radius: 10px;
-  padding: 10px;
-  background: #fafafa;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(180deg, #fcfcfd, #f8fafc);
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
 .admin-dropzone.is-dragging {
   border-color: var(--admin-accent);
   background: #fff7ed;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
+}
+
+.admin-dropzone--add {
+  margin-top: 8px;
 }
 
 .admin-dropzone__title {
-  margin: 0 0 4px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  margin: 0 0 6px;
+  font-size: 0.92rem;
+  font-weight: 700;
 }
 
 .admin-dropzone__meta {
-  margin: 0 0 8px;
-  font-size: 0.78rem;
+  margin: 0 0 12px;
+  font-size: 0.8rem;
   color: var(--admin-muted);
 }
 

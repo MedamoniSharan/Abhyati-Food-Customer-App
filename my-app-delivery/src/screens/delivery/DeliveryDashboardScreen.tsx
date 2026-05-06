@@ -2,6 +2,8 @@ import { DeliveryGoogleMap } from '../../components/DeliveryGoogleMap'
 import type { DeliveryStop } from '../../services/deliveryBackendApi'
 
 type Props = {
+  /** True while the assignments list is loading (initial fetch or refresh). */
+  loading?: boolean
   currentStop: DeliveryStop | null
   totalStops: number
   completedStops: number
@@ -12,6 +14,7 @@ type Props = {
 }
 
 export function DeliveryDashboardScreen({
+  loading = false,
   currentStop,
   totalStops,
   completedStops,
@@ -53,7 +56,15 @@ export function DeliveryDashboardScreen({
         </div>
       </header>
 
-      <main className="dd-main">
+      <main className={`dd-main${loading ? ' dd-main--busy' : ''}`}>
+        {loading ? (
+          <div className="dd-main-loader" role="status" aria-live="polite" aria-busy="true">
+            <div className="dd-loader-card">
+              <span className="dd-loader-spin" aria-hidden />
+              <span>Loading assignments…</span>
+            </div>
+          </div>
+        ) : null}
         <h2 className="sr-only">Statistics</h2>
         <div className="dd-stat-grid">
           <div className="dd-hero-black">

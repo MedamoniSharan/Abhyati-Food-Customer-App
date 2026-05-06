@@ -77,6 +77,25 @@ function startOfLocalDay(d: Date) {
   return x
 }
 
+function adminPageLoadingPhrase(p: Page): string {
+  switch (p) {
+    case 'dashboard':
+      return 'Loading dashboard…'
+    case 'customers':
+      return 'Loading customers…'
+    case 'drivers':
+      return 'Loading drivers…'
+    case 'products':
+      return 'Opening products…'
+    case 'deliveries':
+      return 'Loading orders and delivery…'
+    case 'settings':
+      return 'Loading settings…'
+    default:
+      return 'Loading…'
+  }
+}
+
 function paginateRows<T>(rows: T[], page: number, pageSize: number) {
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
   const safePage = Math.min(Math.max(page, 1), totalPages)
@@ -163,6 +182,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [overview, setOverview] = useState<Overview | null>(null)
   const [loadErr, setLoadErr] = useState('')
+  const [pageDataLoading, setPageDataLoading] = useState(false)
   const [customers, setCustomers] = useState<AuthUser[]>([])
   const [drivers, setDrivers] = useState<
     Array<AuthUser & { zohoContactId?: string; disabled?: boolean }>
@@ -271,6 +291,10 @@ export default function App() {
 
   const loadPageData = useCallback(async () => {
     setLoadErr('')
+    if (page === 'products' || page === 'settings') {
+      setPageDataLoading(false)
+      return
+    }
     try {
       if (page === 'dashboard') {
         await Promise.all([refreshOverview(), refreshDashboardStats()])
@@ -288,6 +312,8 @@ export default function App() {
         setAdminToken(null)
         setTokenState(null)
       }
+    } finally {
+      setPageDataLoading(false)
     }
   }, [
     page,
@@ -301,7 +327,11 @@ export default function App() {
   ])
 
   useEffect(() => {
-    if (!token) return
+    if (!token) {
+      setPageDataLoading(false)
+      return
+    }
+    setPageDataLoading(true)
     void loadPageData()
   }, [token, page, loadPageData])
 
@@ -460,6 +490,7 @@ export default function App() {
   function logout() {
     setAdminToken(null)
     setTokenState(null)
+    setPageDataLoading(false)
   }
 
   if (!token) {
@@ -545,6 +576,13 @@ export default function App() {
         <main className="admin-content">
           {loadErr ? <div className="admin-error">{loadErr}</div> : null}
 
+          {pageDataLoading ? (
+            <div className="admin-page-loader" role="status" aria-live="polite" aria-busy="true">
+              <div className="admin-page-loader__spinner" aria-hidden />
+              <p className="admin-page-loader__text">{adminPageLoadingPhrase(page)}</p>
+            </div>
+          ) : (
+            <>
           {page === 'dashboard' && overview ? (
             <>
               <div className="admin-kpis">
@@ -1429,6 +1467,8 @@ export default function App() {
               </p>
             </>
           ) : null}
+            </>
+          )}
 
           {showAddCustomerModal ? (
             <div

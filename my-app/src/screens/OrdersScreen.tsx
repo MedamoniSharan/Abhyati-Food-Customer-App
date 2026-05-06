@@ -36,22 +36,25 @@ export function OrdersScreen({
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <h1>My Orders</h1>
-          <button type="button" className="icon-btn" onClick={() => setTab((t) => (t === 'active' ? 'past' : 'active'))}>
-            <span className="material-symbols-outlined">filter_list</span>
-          </button>
+          <span style={{ width: 40 }} aria-hidden="true" />
         </div>
       </header>
 
       <div className="tabs">
         <button type="button" className={tab === 'active' ? 'tab active' : 'tab'} onClick={() => setTab('active')}>
-          Active Orders
+          In Progress
         </button>
         <button type="button" className={tab === 'past' ? 'tab active' : 'tab'} onClick={() => setTab('past')}>
-          Past Orders
+          Delivered
         </button>
       </div>
 
       <main className="content orders-content">
+        <p className="orders-intro">
+          {tab === 'active'
+            ? 'Track ongoing orders and check what to do next.'
+            : 'See completed orders, download invoice, or buy again.'}
+        </p>
         {visibleOrders.map((order) => (
           <OrderCard
             key={order.id}
@@ -69,14 +72,18 @@ export function OrdersScreen({
             className="btn btn-dark block"
             onClick={() => onQuickAddFromOrder(visibleOrders[0])}
           >
-            Add Past Order to Cart
+            Buy Last Delivered Order Again
           </button>
         ) : null}
 
         {visibleOrders.length === 0 ? (
           <div className="empty-state">
-            <h3>No orders in this tab</h3>
-            <p>Orders will appear here once they are placed.</p>
+            <h3>{tab === 'active' ? 'No active orders right now' : 'No delivered orders yet'}</h3>
+            <p>
+              {tab === 'active'
+                ? 'New orders will appear here and you can track delivery in one tap.'
+                : 'Delivered orders will show up here once completed.'}
+            </p>
           </div>
         ) : null}
       </main>

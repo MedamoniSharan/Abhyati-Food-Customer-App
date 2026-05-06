@@ -152,15 +152,31 @@ export function DeliveryDriverApp({ user, onLogout, onNotify }: Props) {
       return
     }
     let mounted = true
-    getDeliveryStopDetail(detailStopId).then((stop) => {
-      if (!mounted) return
-      setDetailFromApi(stop)
-      setLoadingDetail(false)
-    })
+    getDeliveryStopDetail(detailStopId)
+      .then((stop) => {
+        if (!mounted) return
+        if (!stop) {
+          setDetailFromApi(null)
+          setDetailStopId(null)
+          onNotify('Delivery not found')
+          return
+        }
+        setDetailFromApi(stop)
+      })
+      .catch(() => {
+        if (!mounted) return
+        setDetailFromApi(null)
+        setDetailStopId(null)
+        onNotify('Could not load delivery')
+      })
+      .finally(() => {
+        if (!mounted) return
+        setLoadingDetail(false)
+      })
     return () => {
       mounted = false
     }
-  }, [detailStopId, stops])
+  }, [detailStopId, stops, onNotify])
 
   useEffect(() => () => closeScanner(), [])
 
@@ -177,6 +193,20 @@ export function DeliveryDriverApp({ user, onLogout, onNotify }: Props) {
   function closeOverlays() {
     setDetailStopId(null)
     setPodStopId(null)
+  }
+
+  if (detailStopId && !detail && loadingDetail) {
+    return (
+      <div className="driver-app">
+        <div className="driver-phone-frame dd-detail-loading-frame">
+          <div className="dd-loader-card" role="status" aria-live="polite">
+            <span className="dd-loader-spin" aria-hidden />
+            <span>Loading delivery…</span>
+          </div>
+        </div>
+        <DeliveryBottomNav active={tab} onChange={setTab} onScan={openScanner} />
+      </div>
+    )
   }
 
   if (podDetail) {
@@ -260,6 +290,7 @@ export function DeliveryDriverApp({ user, onLogout, onNotify }: Props) {
       <div className="driver-phone-frame">
         {tab === 'dashboard' ? (
           <DeliveryDashboardScreen
+            loading={loadingStops}
             currentStop={activeStops.find((s) => s.isNext) ?? activeStops[0] ?? null}
             totalStops={activeStops.length}
             completedStops={completedCount}
@@ -405,11 +436,11 @@ export function DeliveryDriverApp({ user, onLogout, onNotify }: Props) {
         </div>
       ) : null}
 
-      {(loadingStops || loadingDetail || confirming) ? (
+      {loadingDetail || confirming ? (
         <div className="dd-loader-overlay" aria-live="polite">
           <div className="dd-loader-card">
             <span className="dd-loader-spin" aria-hidden />
-            {confirming ? 'Syncing delivery...' : 'Loading...'}
+            {confirming ? 'Syncing delivery…' : 'Loading delivery…'}
           </div>
         </div>
       ) : null}

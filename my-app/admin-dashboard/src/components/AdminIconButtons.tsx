@@ -27,7 +27,15 @@ function IconTrash() {
 
 export function IconEditButton({ label, onClick, disabled }: Omit<Props, 'variant'>) {
   return (
-    <button type="button" className="admin-icon-btn" onClick={onClick} disabled={disabled} aria-label={label} title={label}>
+    <button
+      type="button"
+      className="admin-icon-btn"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      data-tooltip={label}
+    >
       <IconEdit />
     </button>
   )
@@ -42,6 +50,7 @@ export function IconDeleteButton({ label, onClick, disabled }: Omit<Props, 'vari
       disabled={disabled}
       aria-label={label}
       title={label}
+      data-tooltip={label}
     >
       <IconTrash />
     </button>

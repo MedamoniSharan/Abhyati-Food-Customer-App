@@ -81,7 +81,7 @@ export function AssignedDeliveriesScreen({
       </header>
 
       <main className="dd-main">
-        <div className="dd-stat-grid" style={{ marginBottom: 8 }}>
+        <div className={`dd-stat-grid${loading ? ' dd-stat-grid--loading' : ''}`} style={{ marginBottom: 8 }}>
           <div className="dd-stat-card">
             <div className="dd-stat-label">
               <span className="material-symbols-outlined" style={{ fontSize: 20, background: '#f1f5f9', borderRadius: 8, padding: 4 }}>
@@ -89,7 +89,7 @@ export function AssignedDeliveriesScreen({
               </span>
               Total Stops
             </div>
-            <p className="dd-stat-value">{stops.length}</p>
+            <p className="dd-stat-value">{loading ? '—' : stops.length}</p>
           </div>
           <div className="dd-stat-card">
             <div className="dd-stat-label">
@@ -101,7 +101,7 @@ export function AssignedDeliveriesScreen({
               </span>
               Completed
             </div>
-            <p className="dd-stat-value">{completedCount}</p>
+            <p className="dd-stat-value">{loading ? '—' : completedCount}</p>
           </div>
         </div>
 
@@ -112,9 +112,43 @@ export function AssignedDeliveriesScreen({
           </button>
         </div>
 
-        {loading ? <p style={{ color: 'var(--dd-muted)' }}>Loading deliveries...</p> : null}
+        {loading ? (
+          <>
+            <p className="sr-only">Loading deliveries…</p>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <article key={`route-skel-${i}`} className="dd-route-card dd-route-card--skeleton" aria-hidden>
+                <div className="dd-route-inner">
+                  <div className="dd-skel-row">
+                    <div className="dd-skel-block">
+                      <div className="dd-skel dd-skel--tag" />
+                      <div className="dd-skel dd-skel--title" />
+                      <div className="dd-skel dd-skel--meta" />
+                    </div>
+                    <div className="dd-skel dd-skel--amount" />
+                  </div>
+                  <div className="dd-skel-row" style={{ marginTop: 12 }}>
+                    <div className="dd-skel dd-skel--icon" />
+                    <div className="dd-skel-block" style={{ flex: 1 }}>
+                      <div className="dd-skel dd-skel--line" />
+                      <div className="dd-skel dd-skel--line short" />
+                    </div>
+                  </div>
+                  <div className="dd-skel-footer">
+                    <div className="dd-skel dd-skel--avatar" />
+                    <div className="dd-skel-block" style={{ flex: 1 }}>
+                      <div className="dd-skel dd-skel--line" style={{ maxWidth: 140 }} />
+                      <div className="dd-skel dd-skel--line short" />
+                    </div>
+                    <div className="dd-skel dd-skel--btn" />
+                  </div>
+                </div>
+              </article>
+            ))}
+          </>
+        ) : null}
         {!loading && stops.length === 0 ? <p style={{ color: 'var(--dd-muted)' }}>No deliveries assigned.</p> : null}
-        {stops.map((stop) => (
+        {!loading
+          ? stops.map((stop) => (
           <article key={stop.id} className={`dd-route-card ${stop.isNext ? 'next' : ''}`}>
             <div className="dd-route-inner">
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
@@ -199,7 +233,8 @@ export function AssignedDeliveriesScreen({
               </div>
             </div>
           </article>
-        ))}
+            ))
+          : null}
       </main>
     </>
   )

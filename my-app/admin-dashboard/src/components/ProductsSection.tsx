@@ -73,6 +73,8 @@ export function ProductsSection() {
   const [imageRevByItem, setImageRevByItem] = useState<Record<string, string>>({})
   const [productsSortAsc, setProductsSortAsc] = useState(true)
   const [selectedProductIds, setSelectedProductIds] = useState<Record<string, boolean>>({})
+  const [showAddProductModal, setShowAddProductModal] = useState(false)
+  const [creatingProduct, setCreatingProduct] = useState(false)
 
   useEffect(() => {
     setEditProductImage(null)
@@ -155,166 +157,68 @@ export function ProductsSection() {
     await loadCatalog()
   }
 
+  async function createProduct() {
+    const rate = Number(newProduct.rate)
+    if (!newProduct.name.trim() || !Number.isFinite(rate)) {
+      alert('Name and rate are required')
+      return
+    }
+    setCreatingProduct(true)
+    try {
+      const created = await adminFetch<{ item?: { item_id?: string } }>('/api/admin/items', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newProduct.name.trim(),
+          rate,
+          product_type: newProduct.product_type,
+          unit: newProduct.unit.trim() || 'unit',
+          ...(newProduct.sku.trim() ? { sku: newProduct.sku.trim() } : {}),
+          ...(newProduct.description.trim() ? { description: newProduct.description.trim() } : {})
+        })
+      })
+      const itemId = created.item?.item_id != null ? String(created.item.item_id) : ''
+      let imageErr = ''
+      if (newProductImage && itemId) {
+        try {
+          await adminUploadItemImage(itemId, newProductImage)
+          setImageRevByItem((m) => ({ ...m, [itemId]: String(Date.now()) }))
+        } catch (imgE) {
+          imageErr = '\n\nImage was not uploaded: ' + (imgE instanceof Error ? imgE.message : 'Unknown error')
+        }
+      } else if (newProductImage && !itemId) {
+        imageErr = '\n\nCould not upload image (no item id in Zoho response).'
+      }
+      setNewProduct({
+        name: '',
+        rate: '',
+        sku: '',
+        unit: 'unit',
+        description: '',
+        product_type: 'goods'
+      })
+      setNewProductImage(null)
+      setIsDraggingNewImage(false)
+      if (newProductImageInputRef.current) newProductImageInputRef.current.value = ''
+      setShowAddProductModal(false)
+      await refreshAfterMutation()
+      alert(`Product created in Zoho Books.${imageErr}`)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      setCreatingProduct(false)
+    }
+  }
+
   return (
     <>
-      <h2 style={{ marginTop: 0 }}>Products</h2>
-      <p className="admin-products-lead">
-        Zoho Books items — same catalog as the customer app (<code>/api/zoho/items</code>). Thumbnails use{' '}
-        <code>/api/items/:id/image</code>. You can attach a JPEG, PNG, GIF, or WebP when creating or editing. Use search
-        and filters to narrow the list; switch between grid and table.
-      </p>
+      <div className="admin-products-header">
+        <h2 style={{ marginTop: 0 }}>Products</h2>
+        <button type="button" className="admin-btn admin-btn-inline admin-btn-add-product" onClick={() => setShowAddProductModal(true)}>
+          Add Product
+        </button>
+      </div>
 
-      <section className="admin-card admin-card--form">
-        <h3 className="admin-card-title">Add product</h3>
-        <div className="admin-form-row admin-form-row--wrap">
-          <input
-            className="admin-input admin-input--grow"
-            placeholder="Name *"
-            value={newProduct.name}
-            onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
-          />
-          <input
-            className="admin-input"
-            style={{ width: 120 }}
-            placeholder="Rate *"
-            type="number"
-            min={0}
-            step="0.01"
-            value={newProduct.rate}
-            onChange={(e) => setNewProduct((p) => ({ ...p, rate: e.target.value }))}
-          />
-          <input
-            className="admin-input"
-            style={{ width: 120 }}
-            placeholder="SKU"
-            value={newProduct.sku}
-            onChange={(e) => setNewProduct((p) => ({ ...p, sku: e.target.value }))}
-          />
-          <input
-            className="admin-input"
-            style={{ width: 100 }}
-            placeholder="Unit"
-            value={newProduct.unit}
-            onChange={(e) => setNewProduct((p) => ({ ...p, unit: e.target.value }))}
-          />
-          <select
-            className="admin-input"
-            style={{ width: 140 }}
-            value={newProduct.product_type}
-            onChange={(e) =>
-              setNewProduct((p) => ({
-                ...p,
-                product_type: e.target.value as typeof p.product_type
-              }))
-            }
-          >
-            <option value="goods">goods</option>
-            <option value="service">service</option>
-            <option value="digital_service">digital_service</option>
-          </select>
-          <input
-            className="admin-input admin-input--grow"
-            placeholder="Description"
-            value={newProduct.description}
-            onChange={(e) => setNewProduct((p) => ({ ...p, description: e.target.value }))}
-          />
-          <label className="admin-file-label">
-            <div
-              className={`admin-dropzone${isDraggingNewImage ? ' is-dragging' : ''}`}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setIsDraggingNewImage(true)
-              }}
-              onDragEnter={(e) => {
-                e.preventDefault()
-                setIsDraggingNewImage(true)
-              }}
-              onDragLeave={(e) => {
-                e.preventDefault()
-                if (e.currentTarget === e.target) setIsDraggingNewImage(false)
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                setIsDraggingNewImage(false)
-                const file = e.dataTransfer.files?.[0]
-                if (!file) return
-                if (!file.type.startsWith('image/')) {
-                  alert('Please drop an image file')
-                  return
-                }
-                setNewProductImage(file)
-              }}
-            >
-              <p className="admin-dropzone__title">Drag & drop product image here</p>
-              <p className="admin-dropzone__meta">or click below to choose (JPEG, PNG, GIF, WebP)</p>
-              <span className="admin-file-label__text">Image (optional)</span>
-              <input
-                ref={newProductImageInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                className="admin-file-input"
-                onChange={(e) => setNewProductImage(e.target.files?.[0] ?? null)}
-              />
-            </div>
-          </label>
-          <button
-            type="button"
-            className="admin-btn admin-btn-inline"
-            onClick={async () => {
-              const rate = Number(newProduct.rate)
-              if (!newProduct.name.trim() || !Number.isFinite(rate)) {
-                alert('Name and rate are required')
-                return
-              }
-              try {
-                const created = await adminFetch<{ item?: { item_id?: string } }>('/api/admin/items', {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    name: newProduct.name.trim(),
-                    rate,
-                    product_type: newProduct.product_type,
-                    unit: newProduct.unit.trim() || 'unit',
-                    ...(newProduct.sku.trim() ? { sku: newProduct.sku.trim() } : {}),
-                    ...(newProduct.description.trim() ? { description: newProduct.description.trim() } : {})
-                  })
-                })
-                const itemId = created.item?.item_id != null ? String(created.item.item_id) : ''
-                let imageErr = ''
-                if (newProductImage && itemId) {
-                  try {
-                    await adminUploadItemImage(itemId, newProductImage)
-                    setImageRevByItem((m) => ({ ...m, [itemId]: String(Date.now()) }))
-                  } catch (imgE) {
-                    imageErr =
-                      '\n\nImage was not uploaded: ' + (imgE instanceof Error ? imgE.message : 'Unknown error')
-                  }
-                } else if (newProductImage && !itemId) {
-                  imageErr = '\n\nCould not upload image (no item id in Zoho response).'
-                }
-                setNewProduct({
-                  name: '',
-                  rate: '',
-                  sku: '',
-                  unit: 'unit',
-                  description: '',
-                  product_type: 'goods'
-                })
-                setNewProductImage(null)
-                setIsDraggingNewImage(false)
-                if (newProductImageInputRef.current) newProductImageInputRef.current.value = ''
-                await refreshAfterMutation()
-                alert(`Product created in Zoho Books.${imageErr}`)
-              } catch (e) {
-                alert(e instanceof Error ? e.message : 'Failed')
-              }
-            }}
-          >
-            Create in Zoho
-          </button>
-        </div>
-      </section>
-
-      <section className="admin-card" style={{ marginTop: 20 }}>
+      <section className="admin-card">
         <div className="admin-toolbar">
           <div className="admin-toolbar__search">
             <span className="admin-toolbar__search-icon" aria-hidden>
@@ -724,6 +628,125 @@ export function ProductsSection() {
                 }}
               >
                 Save to Zoho
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showAddProductModal ? (
+        <div
+          className="admin-modal-backdrop"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !creatingProduct) setShowAddProductModal(false)
+          }}
+        >
+          <div className="admin-modal admin-modal--wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
+            <h3 className="admin-modal__title">Add Product</h3>
+            <div className="admin-form-row admin-form-row--wrap">
+              <input
+                className="admin-input admin-input--grow"
+                placeholder="Name *"
+                value={newProduct.name}
+                onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
+              />
+              <input
+                className="admin-input"
+                style={{ width: 120 }}
+                placeholder="Rate *"
+                type="number"
+                min={0}
+                step="0.01"
+                value={newProduct.rate}
+                onChange={(e) => setNewProduct((p) => ({ ...p, rate: e.target.value }))}
+              />
+              <input
+                className="admin-input"
+                style={{ width: 120 }}
+                placeholder="SKU"
+                value={newProduct.sku}
+                onChange={(e) => setNewProduct((p) => ({ ...p, sku: e.target.value }))}
+              />
+              <input
+                className="admin-input"
+                style={{ width: 100 }}
+                placeholder="Unit"
+                value={newProduct.unit}
+                onChange={(e) => setNewProduct((p) => ({ ...p, unit: e.target.value }))}
+              />
+              <select
+                className="admin-input"
+                style={{ width: 140 }}
+                value={newProduct.product_type}
+                onChange={(e) =>
+                  setNewProduct((p) => ({
+                    ...p,
+                    product_type: e.target.value as typeof p.product_type
+                  }))
+                }
+              >
+                <option value="goods">goods</option>
+                <option value="service">service</option>
+                <option value="digital_service">digital_service</option>
+              </select>
+              <input
+                className="admin-input admin-input--grow"
+                placeholder="Description"
+                value={newProduct.description}
+                onChange={(e) => setNewProduct((p) => ({ ...p, description: e.target.value }))}
+              />
+            </div>
+            <div
+              className={`admin-dropzone admin-dropzone--add${isDraggingNewImage ? ' is-dragging' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setIsDraggingNewImage(true)
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault()
+                setIsDraggingNewImage(true)
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault()
+                if (e.currentTarget === e.target) setIsDraggingNewImage(false)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                setIsDraggingNewImage(false)
+                const file = e.dataTransfer.files?.[0]
+                if (!file) return
+                if (!file.type.startsWith('image/')) {
+                  alert('Please drop an image file')
+                  return
+                }
+                setNewProductImage(file)
+              }}
+            >
+              <p className="admin-dropzone__title">Drop product image here</p>
+              <p className="admin-dropzone__meta">Drag and drop or browse. Supported: JPEG, PNG, GIF, WebP.</p>
+              <label className="admin-file-label admin-file-label--block">
+                <span className="admin-file-label__text">{newProductImage ? newProductImage.name : 'Choose image'}</span>
+                <input
+                  ref={newProductImageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="admin-file-input"
+                  onChange={(e) => setNewProductImage(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+            <div className="admin-modal__footer">
+              <button
+                type="button"
+                className="admin-btn admin-btn--ghost"
+                disabled={creatingProduct}
+                onClick={() => setShowAddProductModal(false)}
+              >
+                Cancel
+              </button>
+              <button type="button" className="admin-btn admin-btn-inline" disabled={creatingProduct} onClick={() => void createProduct()}>
+                {creatingProduct ? 'Creating…' : 'Create Product'}
               </button>
             </div>
           </div>

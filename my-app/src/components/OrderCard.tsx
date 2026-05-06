@@ -10,13 +10,18 @@ type Props = {
 }
 
 export function OrderCard({ order, onTrackOrder, onViewDetails, onInvoice, onReorder }: Props) {
+  const statusLabel =
+    order.status === 'Processing' ? 'Preparing your order' : order.status === 'Shipped' ? 'Out for delivery' : 'Delivered'
+
+  const actionLabel = order.status === 'Processing' ? 'View Order' : 'Track Delivery'
+
   return (
     <article className="order-card">
       <div className="order-main">
         <img src={order.image} alt={`Order ${order.id}`} />
         <div className="order-body">
           <div className="order-head">
-            <span className={`status status-${order.status.toLowerCase()}`}>{order.status}</span>
+            <span className={`status status-${order.status.toLowerCase()}`}>{statusLabel}</span>
             <span>{order.date}</span>
           </div>
           <h3>Order #{order.id}</h3>
@@ -25,16 +30,14 @@ export function OrderCard({ order, onTrackOrder, onViewDetails, onInvoice, onReo
         </div>
       </div>
 
-      {order.status === 'Shipped' ? (
-        <button type="button" className="btn btn-outline block" onClick={() => onTrackOrder(order)}>
+      {order.status !== 'Delivered' ? (
+        <button
+          type="button"
+          className={order.status === 'Shipped' ? 'btn btn-outline block' : 'btn btn-muted block'}
+          onClick={() => (order.status === 'Shipped' ? onTrackOrder(order) : onViewDetails(order))}
+        >
           <span className="material-symbols-outlined">local_shipping</span>
-          Track Order
-        </button>
-      ) : null}
-
-      {order.status === 'Processing' ? (
-        <button type="button" className="btn btn-muted block" onClick={() => onViewDetails(order)}>
-          View Details
+          {actionLabel}
         </button>
       ) : null}
 
@@ -42,11 +45,11 @@ export function OrderCard({ order, onTrackOrder, onViewDetails, onInvoice, onReo
         <div className="delivered-actions">
           <button type="button" className="btn btn-muted" onClick={() => onInvoice(order)}>
             <span className="material-symbols-outlined">receipt_long</span>
-            Invoice
+            Download Invoice
           </button>
           <button type="button" className="btn btn-dark" onClick={() => onReorder(order)}>
             <span className="material-symbols-outlined">refresh</span>
-            Reorder
+            Buy Again
           </button>
         </div>
       ) : null}
