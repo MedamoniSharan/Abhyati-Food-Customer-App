@@ -38,6 +38,15 @@ type Overview = {
 }
 
 type AuthUser = { id: string; fullName: string; email: string }
+type UnifiedCustomerRow = {
+  key: string
+  source: 'app' | 'zoho'
+  fullName: string
+  email: string
+  mobile: string
+  zohoContactId: string
+  appId?: string
+}
 
 type DeliveryRow = {
   id: string
@@ -86,7 +95,7 @@ function adminPageLoadingPhrase(p: Page): string {
     case 'drivers':
       return 'Loading drivers…'
     case 'products':
-      return 'Opening products…'
+      return 'Loading products…'
     case 'deliveries':
       return 'Loading orders and delivery…'
     case 'settings':
@@ -107,7 +116,11 @@ function paginateRows<T>(rows: T[], page: number, pageSize: number) {
   }
 }
 
-function SidebarIcon({ kind }: { kind: 'dashboard' | 'customers' | 'drivers' | 'products' | 'deliveries' | 'settings' | 'logout' | 'plus' }) {
+function SidebarIcon({
+  kind
+}: {
+  kind: 'dashboard' | 'customers' | 'drivers' | 'products' | 'deliveries' | 'orders' | 'deliver' | 'settings' | 'logout' | 'plus'
+}) {
   if (kind === 'plus') {
     return (
       <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -156,6 +169,25 @@ function SidebarIcon({ kind }: { kind: 'dashboard' | 'customers' | 'drivers' | '
       </svg>
     )
   }
+  if (kind === 'orders') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M8 6h13M8 12h13M8 18h13" />
+        <circle cx="3.5" cy="6" r="1.5" />
+        <circle cx="3.5" cy="12" r="1.5" />
+        <circle cx="3.5" cy="18" r="1.5" />
+      </svg>
+    )
+  }
+  if (kind === 'deliver') {
+    return (
+      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M9 19V6l12-3v13" />
+        <path d="M3 6l12-3" />
+        <path d="M3 6v13l12-3" />
+      </svg>
+    )
+  }
   if (kind === 'settings') {
     return (
       <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -179,10 +211,11 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
-  const [page, setPage] = useState<Page>('dashboard')
+  const [page, setPage] = useState<Page>('products')
   const [overview, setOverview] = useState<Overview | null>(null)
   const [loadErr, setLoadErr] = useState('')
   const [pageDataLoading, setPageDataLoading] = useState(false)
+  const [productsLoading, setProductsLoading] = useState(false)
   const [customers, setCustomers] = useState<AuthUser[]>([])
   const [drivers, setDrivers] = useState<
     Array<AuthUser & { zohoContactId?: string; disabled?: boolean }>
@@ -208,12 +241,11 @@ export default function App() {
   const [orderRef, setOrderRef] = useState('')
   const [orderLines, setOrderLines] = useState([{ item_id: '', quantity: '1', rate: '' }])
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
+  const [customersLoading, setCustomersLoading] = useState(false)
   const [customersSortAsc, setCustomersSortAsc] = useState(true)
   const [customersPage, setCustomersPage] = useState(1)
-  const [selectedCustomerEmails, setSelectedCustomerEmails] = useState<Record<string, boolean>>({})
-  const [zohoSortAsc, setZohoSortAsc] = useState(true)
-  const [zohoPage, setZohoPage] = useState(1)
-  const [selectedZohoIds, setSelectedZohoIds] = useState<Record<string, boolean>>({})
+  const [selectedCustomerRowKeys, setSelectedCustomerRowKeys] = useState<Record<string, boolean>>({})
+  const [zohoCustomersLoading, setZohoCustomersLoading] = useState(false)
   const [driversSortAsc, setDriversSortAsc] = useState(true)
   const [driversPage, setDriversPage] = useState(1)
   const [selectedDriverEmails, setSelectedDriverEmails] = useState<Record<string, boolean>>({})
@@ -235,8 +267,13 @@ export default function App() {
   }, [])
 
   const refreshCustomers = useCallback(async () => {
-    const r = await adminFetch<{ customers: AuthUser[] }>('/api/admin/customers')
-    setCustomers(r.customers || [])
+    setCustomersLoading(true)
+    try {
+      const r = await adminFetch<{ customers: AuthUser[] }>('/api/admin/customers')
+      setCustomers(r.customers || [])
+    } finally {
+      setCustomersLoading(false)
+    }
   }, [])
 
   const refreshDrivers = useCallback(async () => {
@@ -264,8 +301,13 @@ export default function App() {
   }, [])
 
   const refreshZohoContacts = useCallback(async () => {
-    const r = await adminFetch<{ contacts?: ZohoContactRow[] }>('/api/admin/zoho/customer-contacts')
-    setZohoContacts(Array.isArray(r.contacts) ? r.contacts : [])
+    setZohoCustomersLoading(true)
+    try {
+      const r = await adminFetch<{ contacts?: ZohoContactRow[] }>('/api/admin/zoho/customer-contacts')
+      setZohoContacts(Array.isArray(r.contacts) ? r.contacts : [])
+    } finally {
+      setZohoCustomersLoading(false)
+    }
   }, [])
 
   const refreshDashboardStats = useCallback(async () => {
@@ -335,27 +377,66 @@ export default function App() {
     void loadPageData()
   }, [token, page, loadPageData])
 
+  const unifiedCustomers = useMemo(() => {
+    const appRows: UnifiedCustomerRow[] = customers.map((c) => ({
+      key: `app:${String(c.id ?? c.email)}`,
+      source: 'app',
+      fullName: c.fullName,
+      email: c.email,
+      mobile: '—',
+      zohoContactId: '—',
+      appId: c.id
+    }))
+    const zohoRows: UnifiedCustomerRow[] = zohoContacts.map((z) => ({
+      key: `zoho:${String(z.contact_id ?? z.email ?? z.contact_name ?? Math.random())}`,
+      source: 'zoho',
+      fullName: String(z.contact_name ?? '—'),
+      email: String(z.email ?? '—'),
+      mobile: String(z.mobile ?? z.phone ?? '—'),
+      zohoContactId: String(z.contact_id ?? '—')
+    }))
+    return [...appRows, ...zohoRows]
+  }, [customers, zohoContacts])
   const sortedCustomers = useMemo(
     () =>
-      [...customers].sort((a, b) =>
+      [...unifiedCustomers].sort((a, b) =>
         customersSortAsc ? a.fullName.localeCompare(b.fullName) : b.fullName.localeCompare(a.fullName)
       ),
-    [customers, customersSortAsc]
+    [unifiedCustomers, customersSortAsc]
   )
   const customersPaged = useMemo(
     () => paginateRows(sortedCustomers, customersPage, TABLE_PAGE_SIZE),
     [sortedCustomers, customersPage]
   )
-  const sortedZohoContacts = useMemo(
-    () =>
-      [...zohoContacts].sort((a, b) =>
-        zohoSortAsc
-          ? String(a.contact_name ?? '').localeCompare(String(b.contact_name ?? ''))
-          : String(b.contact_name ?? '').localeCompare(String(a.contact_name ?? ''))
-      ),
-    [zohoContacts, zohoSortAsc]
+  const selectedAppCustomers = useMemo(
+    () => sortedCustomers.filter((c) => c.source === 'app' && selectedCustomerRowKeys[c.key]),
+    [sortedCustomers, selectedCustomerRowKeys]
   )
-  const zohoPaged = useMemo(() => paginateRows(sortedZohoContacts, zohoPage, TABLE_PAGE_SIZE), [sortedZohoContacts, zohoPage])
+  const handleDeleteSelectedCustomers = useCallback(async () => {
+    if (selectedAppCustomers.length === 0) {
+      alert('Select at least one app customer to delete.')
+      return
+    }
+    const customerEmails = selectedAppCustomers.map((c) => c.email)
+    if (!confirm(`Delete ${customerEmails.length} selected customer(s)?`)) return
+    try {
+      await Promise.all(
+        customerEmails.map((email) =>
+          adminFetch(`/api/admin/customers/${encodeURIComponent(email)}`, {
+            method: 'DELETE'
+          })
+        )
+      )
+      setSelectedCustomerRowKeys((prev) => {
+        const next = { ...prev }
+        for (const row of selectedAppCustomers) delete next[row.key]
+        return next
+      })
+      await Promise.all([refreshCustomers(), refreshZohoContacts()])
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed')
+    }
+  }, [selectedAppCustomers, refreshCustomers, refreshZohoContacts])
   const sortedDrivers = useMemo(
     () =>
       [...drivers].sort((a, b) =>
@@ -402,6 +483,7 @@ export default function App() {
     () => paginateRows(sortedInvoices, invoicesPage, TABLE_PAGE_SIZE),
     [sortedInvoices, invoicesPage]
   )
+  const isCurrentPageLoading = pageDataLoading || (page === 'products' && productsLoading)
   /** Calendar buckets for the last 7 days (local time) — fits a trend line better than weekday-of-week totals. */
   const revenueLast7Days = useMemo(() => {
     const today = startOfLocalDay(new Date())
@@ -542,11 +624,11 @@ export default function App() {
           {(
             [
               ['dashboard', 'Dashboard', 'dashboard'],
-              ['customers', 'Customers', 'customers'],
-              ['drivers', 'Drivers', 'drivers'],
               ['products', 'Products', 'products'],
-              ['deliveries', 'Orders & delivery', 'deliveries'],
-              ['settings', 'Settings', 'settings']
+              ['customers', 'Customers', 'customers'],
+              ['drivers', 'Deliverers', 'drivers'],
+              ['deliveries', 'Orders', 'orders'],
+              ['settings', 'Deliver', 'deliver']
             ] as const
           ).map(([id, label, icon]) => (
             <button key={id} type="button" className={page === id ? 'active' : ''} onClick={() => setPage(id)}>
@@ -576,7 +658,7 @@ export default function App() {
         <main className="admin-content">
           {loadErr ? <div className="admin-error">{loadErr}</div> : null}
 
-          {pageDataLoading ? (
+          {isCurrentPageLoading ? (
             <div className="admin-page-loader" role="status" aria-live="polite" aria-busy="true">
               <div className="admin-page-loader__spinner" aria-hidden />
               <p className="admin-page-loader__text">{adminPageLoadingPhrase(page)}</p>
@@ -727,12 +809,21 @@ export default function App() {
           {page === 'customers' ? (
             <>
               <h2 style={{ marginTop: 0 }}>Customers</h2>
-              <p style={{ color: 'var(--admin-muted)' }}>Create app logins and Zoho customer contacts.</p>
+              <p style={{ color: 'var(--admin-muted)' }}>App + Zoho customers in one list.</p>
               <div className="admin-form-row" style={{ justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--ghost"
+                  disabled={selectedAppCustomers.length === 0}
+                  onClick={() => void handleDeleteSelectedCustomers()}
+                >
+                  Delete selected ({selectedAppCustomers.length})
+                </button>
                 <button type="button" className="admin-btn admin-btn-inline" onClick={() => setShowAddCustomerModal(true)}>
                   Add
                 </button>
               </div>
+              {customersLoading || zohoCustomersLoading ? <div className="admin-section-loader">Loading customers…</div> : null}
               <div className="admin-table-wrap">
                 <table className="admin-table">
                   <thead>
@@ -742,12 +833,12 @@ export default function App() {
                           type="checkbox"
                           checked={
                             customersPaged.pageRows.length > 0 &&
-                            customersPaged.pageRows.every((c) => selectedCustomerEmails[c.email])
+                            customersPaged.pageRows.every((c) => selectedCustomerRowKeys[c.key])
                           }
                           onChange={(e) =>
-                            setSelectedCustomerEmails((prev) => {
+                            setSelectedCustomerRowKeys((prev) => {
                               const next = { ...prev }
-                              for (const c of customersPaged.pageRows) next[c.email] = e.target.checked
+                              for (const c of customersPaged.pageRows) next[c.key] = e.target.checked
                               return next
                             })
                           }
@@ -761,52 +852,81 @@ export default function App() {
                         Name {customersSortAsc ? '▲' : '▼'}
                       </th>
                       <th>Email</th>
+                      <th>Mobile</th>
+                      <th>Source</th>
+                      <th>Zoho Contact ID</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
+                    {!customersLoading && !zohoCustomersLoading && customersPaged.pageRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="admin-muted">
+                          No customers found.
+                        </td>
+                      </tr>
+                    ) : null}
                     {customersPaged.pageRows.map((c) => (
-                      <tr key={c.id}>
+                      <tr key={c.key}>
                         <td>
                           <input
                             type="checkbox"
-                            checked={!!selectedCustomerEmails[c.email]}
+                            checked={!!selectedCustomerRowKeys[c.key]}
                             onChange={(e) =>
-                              setSelectedCustomerEmails((prev) => ({ ...prev, [c.email]: e.target.checked }))
+                              setSelectedCustomerRowKeys((prev) => ({ ...prev, [c.key]: e.target.checked }))
                             }
                           />
                         </td>
                         <td>{c.fullName}</td>
                         <td>{c.email}</td>
+                        <td>{c.mobile}</td>
+                        <td>
+                          <span className={c.source === 'app' ? 'admin-pill' : 'admin-pill admin-pill--muted'}>
+                            {c.source === 'app' ? 'App' : 'Zoho'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.75rem' }}>{c.zohoContactId}</td>
                         <td>
                           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                             <IconEditButton
                               label={`Edit customer ${c.email}`}
                               onClick={() => {
-                                setEditingCustomer({
-                                  id: c.id,
-                                  fullName: c.fullName,
-                                  email: c.email,
-                                  originalEmail: c.email
-                                })
-                                setEditingCustomerMobile('')
+                                if (c.source === 'app') {
+                                  setEditingCustomer({
+                                    id: c.appId,
+                                    fullName: c.fullName,
+                                    email: c.email,
+                                    originalEmail: c.email
+                                  })
+                                  setEditingCustomerMobile('')
+                                } else {
+                                  setEditingCustomer({
+                                    contactId: c.zohoContactId === '—' ? '' : c.zohoContactId,
+                                    fullName: c.fullName,
+                                    email: c.email === '—' ? '' : c.email,
+                                    originalEmail: c.email === '—' ? '' : c.email
+                                  })
+                                  setEditingCustomerMobile(c.mobile === '—' ? '' : c.mobile)
+                                }
                                 setEditingCustomerPassword('')
                               }}
                             />
-                            <IconDeleteButton
-                              label={`Delete customer ${c.email}`}
-                              onClick={async () => {
-                                if (!confirm(`Delete customer ${c.email}?`)) return
-                                try {
-                                  await adminFetch(`/api/admin/customers/${encodeURIComponent(c.email)}`, {
-                                    method: 'DELETE'
-                                  })
-                                  await refreshCustomers()
-                                } catch (e) {
-                                  alert(e instanceof Error ? e.message : 'Failed')
-                                }
-                              }}
-                            />
+                            {c.source === 'app' ? (
+                              <IconDeleteButton
+                                label={`Delete customer ${c.email}`}
+                                onClick={async () => {
+                                  if (!confirm(`Delete customer ${c.email}?`)) return
+                                  try {
+                                    await adminFetch(`/api/admin/customers/${encodeURIComponent(c.email)}`, {
+                                      method: 'DELETE'
+                                    })
+                                    await Promise.all([refreshCustomers(), refreshZohoContacts()])
+                                  } catch (e) {
+                                    alert(e instanceof Error ? e.message : 'Failed')
+                                  }
+                                }}
+                              />
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -815,7 +935,12 @@ export default function App() {
                 </table>
               </div>
               <div className="admin-table-pagination">
-                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setCustomersPage((p) => Math.max(1, p - 1))}>
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  type="button"
+                  disabled={customersLoading || zohoCustomersLoading}
+                  onClick={() => setCustomersPage((p) => Math.max(1, p - 1))}
+                >
                   Prev
                 </button>
                 <span>
@@ -824,98 +949,9 @@ export default function App() {
                 <button
                   className="admin-btn admin-btn--ghost"
                   type="button"
+                  disabled={customersLoading || zohoCustomersLoading}
                   onClick={() => setCustomersPage((p) => Math.min(customersPaged.totalPages, p + 1))}
                 >
-                  Next
-                </button>
-              </div>
-              <h3 style={{ marginTop: 24, marginBottom: 8 }}>Zoho customers</h3>
-              <p style={{ color: 'var(--admin-muted)', fontSize: '0.875rem' }}>
-                These are direct Zoho Books contacts fetched from <code>/api/admin/zoho/customer-contacts</code>.
-              </p>
-              <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>
-                        <input
-                          type="checkbox"
-                          checked={
-                            zohoPaged.pageRows.length > 0 &&
-                            zohoPaged.pageRows.every((z) => selectedZohoIds[String(z.contact_id ?? z.email ?? '')])
-                          }
-                          onChange={(e) =>
-                            setSelectedZohoIds((prev) => {
-                              const next = { ...prev }
-                              for (const z of zohoPaged.pageRows) next[String(z.contact_id ?? z.email ?? '')] = e.target.checked
-                              return next
-                            })
-                          }
-                        />
-                      </th>
-                      <th className="admin-th-sortable" onClick={() => setZohoSortAsc((v) => !v)} title="Sort by name">
-                        Contact {zohoSortAsc ? '▲' : '▼'}
-                      </th>
-                      <th>Email</th>
-                      <th>Mobile</th>
-                      <th>Zoho Contact ID</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {zohoPaged.pageRows.map((z) => (
-                      <tr key={String(z.contact_id ?? z.email)}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={!!selectedZohoIds[String(z.contact_id ?? z.email ?? '')]}
-                            onChange={(e) =>
-                              setSelectedZohoIds((prev) => ({
-                                ...prev,
-                                [String(z.contact_id ?? z.email ?? '')]: e.target.checked
-                              }))
-                            }
-                          />
-                        </td>
-                        <td>{String(z.contact_name ?? '—')}</td>
-                        <td>{String(z.email ?? '—')}</td>
-                        <td>{String(z.mobile ?? z.phone ?? '—')}</td>
-                        <td style={{ fontSize: '0.75rem' }}>{String(z.contact_id ?? '—')}</td>
-                        <td>
-                          <IconEditButton
-                            label={`Edit Zoho customer ${String(z.contact_name ?? z.email ?? z.contact_id ?? '')}`}
-                            onClick={() => {
-                              setEditingCustomer({
-                                contactId: String(z.contact_id ?? ''),
-                                fullName: String(z.contact_name ?? ''),
-                                email: String(z.email ?? ''),
-                                originalEmail: String(z.email ?? '')
-                              })
-                              setEditingCustomerMobile(String(z.mobile ?? z.phone ?? ''))
-                              setEditingCustomerPassword('')
-                            }}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                    {zohoPaged.pageRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="admin-muted">
-                          No Zoho customer contacts found.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-              <div className="admin-table-pagination">
-                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setZohoPage((p) => Math.max(1, p - 1))}>
-                  Prev
-                </button>
-                <span>
-                  Page {zohoPaged.safePage} / {zohoPaged.totalPages}
-                </span>
-                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setZohoPage((p) => Math.min(zohoPaged.totalPages, p + 1))}>
                   Next
                 </button>
               </div>
@@ -1452,7 +1488,7 @@ export default function App() {
             </>
           ) : null}
 
-          {page === 'products' ? <ProductsSection /> : null}
+          {page === 'products' ? <ProductsSection onLoadingChange={setProductsLoading} /> : null}
 
           {page === 'settings' ? (
             <>

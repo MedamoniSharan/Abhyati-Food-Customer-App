@@ -19,6 +19,26 @@ const FILTER_OPTIONS = [
   { value: 'ProductType.Services', label: 'Services' }
 ]
 
+const STOCK_KEYS = ['stock_on_hand', 'available_stock', 'actual_available_stock', 'opening_stock'] as const
+
+function readItemStock(item: ZohoItemRow | null | undefined): number | null {
+  if (!item) return null
+  for (const key of STOCK_KEYS) {
+    const n = Number(item[key])
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
+function detectStockKey(item: ZohoItemRow | null | undefined): (typeof STOCK_KEYS)[number] {
+  if (!item) return 'stock_on_hand'
+  for (const key of STOCK_KEYS) {
+    const raw = item[key]
+    if (raw !== undefined && raw !== null && raw !== '') return key
+  }
+  return 'stock_on_hand'
+}
+
 function ItemThumb({ itemId, label, cacheBust }: { itemId: string; label: string; cacheBust?: string }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -43,7 +63,17 @@ function ItemThumb({ itemId, label, cacheBust }: { itemId: string; label: string
   )
 }
 
-export function ProductsSection() {
+function UploadIcon() {
+  return (
+    <svg className="admin-dropzone__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M12 16V8" />
+      <path d="m8.5 11.5 3.5-3.5 3.5 3.5" />
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+    </svg>
+  )
+}
+
+export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loading: boolean) => void } = {}) {
   const [view, setView] = useState<'grid' | 'table'>('grid')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState<(typeof PER_PAGE_OPTIONS)[number]>(24)
@@ -66,6 +96,7 @@ export function ProductsSection() {
   const [isDraggingNewImage, setIsDraggingNewImage] = useState(false)
   const newProductImageInputRef = useRef<HTMLInputElement>(null)
   const [editingItem, setEditingItem] = useState<ZohoItemRow | null>(null)
+  const [editingStock, setEditingStock] = useState('')
   const [editProductImage, setEditProductImage] = useState<File | null>(null)
   const [editImageObjectUrl, setEditImageObjectUrl] = useState<string | null>(null)
   const [isDraggingEditImage, setIsDraggingEditImage] = useState(false)
@@ -79,6 +110,7 @@ export function ProductsSection() {
   useEffect(() => {
     setEditProductImage(null)
     setIsDraggingEditImage(false)
+    setEditingStock(editingItem ? String(readItemStock(editingItem) ?? '') : '')
   }, [editingItem?.item_id])
 
   useEffect(() => {
@@ -95,6 +127,11 @@ export function ProductsSection() {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 400)
     return () => window.clearTimeout(t)
   }, [searchInput])
+
+  useEffect(() => {
+    onLoadingChange?.(loadingCatalog)
+    return () => onLoadingChange?.(false)
+  }, [loadingCatalog, onLoadingChange])
 
   useEffect(() => {
     setPage(1)
@@ -337,7 +374,19 @@ export function ProductsSection() {
                   const id = String(it.item_id ?? '')
                   const name = String(it.name ?? 'Item')
                   return (
-                    <article key={id || name} className="admin-product-card">
+                    <article
+                      key={id || name}
+                      className="admin-product-card admin-product-card--clickable"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setEditingItem(it)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setEditingItem(it)
+                        }
+                      }}
+                    >
                       <div className="admin-product-card__media">
                         {id ? <ItemThumb itemId={id} label={name} cacheBust={imageRevByItem[id]} /> : null}
                       </div>
@@ -347,6 +396,7 @@ export function ProductsSection() {
                           {String(it.sku || '—')} · {String(it.product_type || '—')}
                         </p>
                         <p className="admin-product-card__price">₹ {String(it.rate ?? '—')}</p>
+                        <p className="admin-product-card__stock">Stock: {readItemStock(it) ?? '—'}</p>
                         <div className="admin-product-card__actions">
                           <IconEditButton label={`Edit ${name}`} onClick={() => setEditingItem(it)} />
                           <IconDeleteButton
@@ -395,6 +445,7 @@ export function ProductsSection() {
                   <th>Type</th>
                   <th>Status</th>
                   <th>Rate</th>
+                  <th>Stock</th>
                   <th>Item ID</th>
                   <th scope="col" className="admin-th-actions">
                     Actions
@@ -420,11 +471,12 @@ export function ProductsSection() {
                       const id = String(it.item_id ?? '')
                       const name = String(it.name ?? '')
                       return (
-                        <tr key={id || name}>
+                        <tr key={id || name} className="admin-table-row-clickable" onClick={() => setEditingItem(it)}>
                           <td>
                             <input
                               type="checkbox"
                               checked={!!selectedProductIds[id]}
+                              onClick={(e) => e.stopPropagation()}
                               onChange={(e) => setSelectedProductIds((prev) => ({ ...prev, [id]: e.target.checked }))}
                             />
                           </td>
@@ -448,9 +500,10 @@ export function ProductsSection() {
                             </span>
                           </td>
                           <td>{String(it.rate ?? '—')}</td>
+                          <td>{readItemStock(it) ?? '—'}</td>
                           <td className="admin-td-mono">{id}</td>
                           <td>
-                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
                               <IconEditButton label={`Edit ${name}`} onClick={() => setEditingItem(it)} />
                               <IconDeleteButton
                                 label={`Delete ${name}`}
@@ -547,10 +600,14 @@ export function ProductsSection() {
                     setEditProductImage(file)
                   }}
                 >
-                  <p className="admin-dropzone__title">Drag & drop product image here</p>
-                  <p className="admin-dropzone__meta">or click below to choose (JPEG, PNG, GIF, WebP)</p>
-                  <label className="admin-file-label admin-file-label--block">
-                    <span className="admin-file-label__text">Replace image (optional)</span>
+                  <div className="admin-dropzone__inner">
+                    <UploadIcon />
+                    <p className="admin-dropzone__title">Drag and drop product image</p>
+                    <p className="admin-dropzone__meta">JPEG, PNG, GIF, WebP. This image is private until you save.</p>
+                    <label className="admin-file-label admin-file-label--block admin-file-label--cta">
+                      <span className="admin-file-label__button">Select files</span>
+                      <span className="admin-file-label__text">{editProductImage ? editProductImage.name : 'Replace image (optional)'}</span>
+                    </label>
                     <input
                       ref={editImageInputRef}
                       type="file"
@@ -558,35 +615,61 @@ export function ProductsSection() {
                       className="admin-file-input"
                       onChange={(e) => setEditProductImage(e.target.files?.[0] ?? null)}
                     />
-                  </label>
+                  </div>
                 </div>
               </div>
             ) : null}
-            <input
-              className="admin-input"
-              placeholder="Name"
-              value={String(editingItem.name ?? '')}
-              onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-            />
-            <input
-              className="admin-input"
-              type="number"
-              placeholder="Rate"
-              value={editingItem.rate != null ? String(editingItem.rate) : ''}
-              onChange={(e) => setEditingItem({ ...editingItem, rate: Number(e.target.value) })}
-            />
-            <input
-              className="admin-input"
-              placeholder="SKU"
-              value={String(editingItem.sku ?? '')}
-              onChange={(e) => setEditingItem({ ...editingItem, sku: e.target.value })}
-            />
-            <input
-              className="admin-input"
-              placeholder="Description"
-              value={String(editingItem.description ?? '')}
-              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-            />
+            <label className="admin-field-label">
+              <span>Product name</span>
+              <input
+                className="admin-input"
+                placeholder="Product name"
+                value={String(editingItem.name ?? '')}
+                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+              />
+            </label>
+            <label className="admin-field-label">
+              <span>Price (rate)</span>
+              <input
+                className="admin-input"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Price (e.g. 99)"
+                value={editingItem.rate != null ? String(editingItem.rate) : ''}
+                onChange={(e) => setEditingItem({ ...editingItem, rate: Number(e.target.value) })}
+              />
+            </label>
+            <label className="admin-field-label">
+              <span>Stock on hand</span>
+              <input
+                className="admin-input"
+                type="number"
+                min={0}
+                step="1"
+                placeholder="Stock quantity (e.g. 120)"
+                value={editingStock}
+                onChange={(e) => setEditingStock(e.target.value)}
+              />
+            </label>
+            <label className="admin-field-label">
+              <span>SKU</span>
+              <input
+                className="admin-input"
+                placeholder="SKU"
+                value={String(editingItem.sku ?? '')}
+                onChange={(e) => setEditingItem({ ...editingItem, sku: e.target.value })}
+              />
+            </label>
+            <label className="admin-field-label">
+              <span>Description</span>
+              <input
+                className="admin-input"
+                placeholder="Description"
+                value={String(editingItem.description ?? '')}
+                onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+              />
+            </label>
             <div className="admin-modal__footer">
               <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setEditingItem(null)}>
                 Cancel
@@ -603,6 +686,9 @@ export function ProductsSection() {
                       body: JSON.stringify({
                         name: editingItem.name,
                         rate: editingItem.rate,
+                        ...(editingStock.trim()
+                          ? { [detectStockKey(editingItem)]: Number(editingStock) }
+                          : {}),
                         sku: editingItem.sku || undefined,
                         description: editingItem.description || undefined
                       })
@@ -723,10 +809,14 @@ export function ProductsSection() {
                 setNewProductImage(file)
               }}
             >
-              <p className="admin-dropzone__title">Drop product image here</p>
-              <p className="admin-dropzone__meta">Drag and drop or browse. Supported: JPEG, PNG, GIF, WebP.</p>
-              <label className="admin-file-label admin-file-label--block">
-                <span className="admin-file-label__text">{newProductImage ? newProductImage.name : 'Choose image'}</span>
+              <div className="admin-dropzone__inner">
+                <UploadIcon />
+                <p className="admin-dropzone__title">Drag and drop product image</p>
+                <p className="admin-dropzone__meta">Supported: JPEG, PNG, GIF, WebP.</p>
+                <label className="admin-file-label admin-file-label--block admin-file-label--cta">
+                  <span className="admin-file-label__button">Select files</span>
+                  <span className="admin-file-label__text">{newProductImage ? newProductImage.name : 'No file selected'}</span>
+                </label>
                 <input
                   ref={newProductImageInputRef}
                   type="file"
@@ -734,7 +824,7 @@ export function ProductsSection() {
                   className="admin-file-input"
                   onChange={(e) => setNewProductImage(e.target.files?.[0] ?? null)}
                 />
-              </label>
+              </div>
             </div>
             <div className="admin-modal__footer">
               <button
