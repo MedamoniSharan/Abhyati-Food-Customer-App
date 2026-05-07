@@ -106,6 +106,9 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
   const [selectedProductIds, setSelectedProductIds] = useState<Record<string, boolean>>({})
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [creatingProduct, setCreatingProduct] = useState(false)
+  const inFlightCatalogKeyRef = useRef<string | null>(null)
+  const lastLoadedCatalogKeyRef = useRef<string | null>(null)
+  const catalogAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     setEditProductImage(null)
@@ -133,27 +136,38 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
     return () => onLoadingChange?.(false)
   }, [loadingCatalog, onLoadingChange])
 
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, filterBy, perPage])
-
-  const loadCatalog = useCallback(async () => {
+  const loadCatalog = useCallback(async (opts?: { force?: boolean }) => {
+    const qs = new URLSearchParams()
+    qs.set('page', String(page))
+    qs.set('per_page', String(perPage))
+    if (debouncedSearch) qs.set('search_text', debouncedSearch)
+    if (filterBy) qs.set('filter_by', filterBy)
+    const key = qs.toString()
+    if (!opts?.force) {
+      if (inFlightCatalogKeyRef.current === key) return
+      if (lastLoadedCatalogKeyRef.current === key) return
+    }
+    catalogAbortRef.current?.abort()
+    const controller = new AbortController()
+    catalogAbortRef.current = controller
+    inFlightCatalogKeyRef.current = key
     setLoadingCatalog(true)
     setCatalogError('')
     try {
-      const qs = new URLSearchParams()
-      qs.set('page', String(page))
-      qs.set('per_page', String(perPage))
-      if (debouncedSearch) qs.set('search_text', debouncedSearch)
-      if (filterBy) qs.set('filter_by', filterBy)
-      const r = await adminFetch<{ items?: ZohoItemRow[]; page_context?: PageCtx }>(`/api/admin/items?${qs.toString()}`)
+      const r = await adminFetch<{ items?: ZohoItemRow[]; page_context?: PageCtx }>(`/api/admin/items?${key}`, {
+        signal: controller.signal
+      })
+      if (controller.signal.aborted) return
       setItems(Array.isArray(r.items) ? r.items : [])
       setPageCtx(r.page_context ?? null)
+      lastLoadedCatalogKeyRef.current = key
     } catch (e) {
+      if (controller.signal.aborted) return
       setCatalogError(e instanceof Error ? e.message : 'Failed to load items')
       setItems([])
       setPageCtx(null)
     } finally {
+      if (inFlightCatalogKeyRef.current === key) inFlightCatalogKeyRef.current = null
       setLoadingCatalog(false)
     }
   }, [page, perPage, debouncedSearch, filterBy])
@@ -161,6 +175,7 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
   useEffect(() => {
     void loadCatalog()
   }, [loadCatalog])
+  useEffect(() => () => catalogAbortRef.current?.abort(), [])
 
   const hasNext = pageCtx?.has_more_page === true
   const hasPrev = page > 1
@@ -191,7 +206,7 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
   const selectedProductsCount = selectedProducts.length
 
   async function refreshAfterMutation() {
-    await loadCatalog()
+    await loadCatalog({ force: true })
   }
 
   async function createProduct() {
@@ -266,14 +281,20 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
               className="admin-toolbar__search-input"
               placeholder="Search name, SKU…"
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              onChange={(e) => {
+                setSearchInput(e.target.value)
+                setPage(1)
+              }}
               aria-label="Search products"
             />
           </div>
           <select
             className="admin-select"
             value={filterBy}
-            onChange={(e) => setFilterBy(e.target.value)}
+            onChange={(e) => {
+              setFilterBy(e.target.value)
+              setPage(1)
+            }}
             aria-label="Filter by status or type"
           >
             {FILTER_OPTIONS.map((o) => (
@@ -285,7 +306,10 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
           <select
             className="admin-select"
             value={perPage}
-            onChange={(e) => setPerPage(Number(e.target.value) as (typeof PER_PAGE_OPTIONS)[number])}
+            onChange={(e) => {
+              setPerPage(Number(e.target.value) as (typeof PER_PAGE_OPTIONS)[number])
+              setPage(1)
+            }}
             aria-label="Items per page"
           >
             {PER_PAGE_OPTIONS.map((n) => (
