@@ -53,9 +53,10 @@ export async function adminLogin(email: string, password: string): Promise<strin
 
 export async function adminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getAdminToken()
-  if (!token) throw new Error('Not signed in')
   const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${token}`)
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
   if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
     headers.set('Content-Type', 'application/json')
   }
@@ -79,12 +80,15 @@ export async function adminFetch<T>(path: string, init: RequestInit = {}): Promi
 /** POST multipart to `/api/admin/items/:id/image` (field name: `image`). */
 export async function adminUploadItemImage(itemId: string, file: File): Promise<void> {
   const token = getAdminToken()
-  if (!token) throw new Error('Not signed in')
   const fd = new FormData()
   fd.append('image', file)
+  const headers = new Headers()
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
   const res = await fetch(apiUrl(`/api/admin/items/${encodeURIComponent(itemId)}/image`), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
     body: fd
   })
   const text = await res.text()

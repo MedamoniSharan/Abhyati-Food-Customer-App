@@ -206,7 +206,7 @@ function SidebarIcon({
 }
 
 export default function App() {
-  const [token, setTokenState] = useState<string | null>(() => getAdminToken())
+  const [token, setTokenState] = useState<string | null>(() => getAdminToken() || 'no-auth')
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState('')
@@ -571,7 +571,7 @@ export default function App() {
 
   function logout() {
     setAdminToken(null)
-    setTokenState(null)
+    setTokenState('no-auth')
     setPageDataLoading(false)
   }
 
