@@ -288,51 +288,53 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
               aria-label="Search products"
             />
           </div>
-          <select
-            className="admin-select"
-            value={filterBy}
-            onChange={(e) => {
-              setFilterBy(e.target.value)
-              setPage(1)
-            }}
-            aria-label="Filter by status or type"
-          >
-            {FILTER_OPTIONS.map((o) => (
-              <option key={o.value || 'all'} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select
-            className="admin-select"
-            value={perPage}
-            onChange={(e) => {
-              setPerPage(Number(e.target.value) as (typeof PER_PAGE_OPTIONS)[number])
-              setPage(1)
-            }}
-            aria-label="Items per page"
-          >
-            {PER_PAGE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n} / page
-              </option>
-            ))}
-          </select>
-          <div className="admin-segmented" role="group" aria-label="View mode">
-            <button
-              type="button"
-              className={view === 'grid' ? 'is-active' : ''}
-              onClick={() => setView('grid')}
+          <div className="admin-toolbar__controls">
+            <select
+              className="admin-select"
+              value={filterBy}
+              onChange={(e) => {
+                setFilterBy(e.target.value)
+                setPage(1)
+              }}
+              aria-label="Filter by status or type"
             >
-              Grid
-            </button>
-            <button
-              type="button"
-              className={view === 'table' ? 'is-active' : ''}
-              onClick={() => setView('table')}
+              {FILTER_OPTIONS.map((o) => (
+                <option key={o.value || 'all'} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="admin-select"
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value) as (typeof PER_PAGE_OPTIONS)[number])
+                setPage(1)
+              }}
+              aria-label="Items per page"
             >
-              Table
-            </button>
+              {PER_PAGE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
+            <div className="admin-segmented" role="group" aria-label="View mode">
+              <button
+                type="button"
+                className={view === 'grid' ? 'is-active' : ''}
+                onClick={() => setView('grid')}
+              >
+                Grid
+              </button>
+              <button
+                type="button"
+                className={view === 'table' ? 'is-active' : ''}
+                onClick={() => setView('table')}
+              >
+                Table
+              </button>
+            </div>
           </div>
         </div>
 
@@ -552,26 +554,28 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
         )}
 
         <nav className="admin-pagination" aria-label="Catalog pages">
-          <button
-            type="button"
-            className="admin-btn admin-btn--ghost"
-            disabled={!hasPrev || loadingCatalog}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Previous
-          </button>
+          <div className="admin-pagination__buttons">
+            <button
+              type="button"
+              className="admin-btn admin-btn--ghost"
+              disabled={!hasPrev || loadingCatalog}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              ← Previous
+            </button>
+            <button
+              type="button"
+              className="admin-btn admin-btn--ghost"
+              disabled={!hasNext || loadingCatalog}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next →
+            </button>
+          </div>
           <span className="admin-pagination__info">
             Page <strong>{pageCtx?.page ?? page}</strong>
             {hasNext ? <span className="admin-muted"> · more available</span> : null}
           </span>
-          <button
-            type="button"
-            className="admin-btn admin-btn--ghost"
-            disabled={!hasNext || loadingCatalog}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </button>
         </nav>
       </section>
 

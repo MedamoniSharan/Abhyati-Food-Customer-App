@@ -648,6 +648,13 @@ textarea {
   margin-bottom: 10px;
 }
 
+.admin-toolbar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
 .admin-toolbar__search {
   position: relative;
   flex: 1 1 220px;
@@ -968,15 +975,23 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 16px 0 4px;
   border-top: 1px solid var(--admin-border);
   margin-top: 8px;
 }
 
+.admin-pagination__buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .admin-pagination__info {
   font-size: 0.875rem;
+  color: var(--admin-muted);
+  text-align: right;
 }
 
 .admin-btn--ghost {
@@ -984,7 +999,8 @@ textarea {
   color: var(--admin-text);
   border: 1px solid var(--admin-border);
   width: auto;
-  padding: 8px 18px;
+  padding: 9px 14px;
+  min-width: 120px;
 }
 
 .admin-btn--ghost:hover:not(:disabled) {
@@ -1172,6 +1188,69 @@ textarea {
 }
 
 @media (max-width: 720px) {
+  .admin-products-header {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .admin-btn-add-product {
+    width: 100%;
+  }
+
+  .admin-toolbar {
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .admin-toolbar__search {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .admin-toolbar__controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .admin-toolbar__controls .admin-select,
+  .admin-toolbar__controls .admin-segmented {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .admin-segmented {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-segmented button {
+    width: 100%;
+  }
+
+  .admin-pagination {
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .admin-pagination__buttons {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .admin-pagination__buttons .admin-btn--ghost {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .admin-pagination__info {
+    width: 100%;
+    text-align: center;
+  }
+
   .admin-modal-backdrop {
     align-items: flex-start;
     overflow-y: auto;
