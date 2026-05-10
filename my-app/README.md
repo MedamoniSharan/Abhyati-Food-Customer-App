@@ -18,7 +18,7 @@ npm run admin:dev
 # or: cd admin-dashboard && npm install && npm run dev
 ```
 
-Open `http://localhost:5174` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from [`backend/.env.example`](backend/.env.example) (defaults are `admin@example.com` / `adminadmin` until you change them).
+Open `http://localhost:5174` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from [`backend/.env.example`](backend/.env.example) (defaults are `admin@abhyati.com` / `admin` until you change them).
 
 **API URL:** By default the admin UI calls `/api` on the same host and Vite proxies to **`http://localhost:3001`** (override with `VITE_PROXY_TARGET` in [`admin-dashboard/.env.example`](admin-dashboard/.env.example)). To use a **hosted** backend instead (e.g. Render), create `admin-dashboard/.env.local`:
 

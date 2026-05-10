@@ -22,8 +22,8 @@ const envSchema = z.object({
   AUTH_DEFAULT_CUSTOMER_PASSWORD: z.string().min(6).default('Abhyati@123'),
 
   /** Admin dashboard + /api/admin/* (override in production) */
-  ADMIN_EMAIL: z.string().email().default('admin@example.com'),
-  ADMIN_PASSWORD: z.string().min(6).default('adminadmin'),
+  ADMIN_EMAIL: z.string().email().default('admin@abhyati.com'),
+  ADMIN_PASSWORD: z.string().min(5).default('admin'),
   JWT_SECRET: z.string().min(16).default('dev-jwt-secret-change-in-prod-32'),
 
   DRIVER_ZOHO_CONTACT_TYPE: z.enum(['vendor', 'customer']).default('vendor'),
