@@ -73,7 +73,7 @@ function UploadIcon() {
   )
 }
 
-export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loading: boolean) => void } = {}) {
+export function ProductsSection() {
   const [view, setView] = useState<'grid' | 'table'>('grid')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState<(typeof PER_PAGE_OPTIONS)[number]>(24)
@@ -106,9 +106,6 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
   const [selectedProductIds, setSelectedProductIds] = useState<Record<string, boolean>>({})
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [creatingProduct, setCreatingProduct] = useState(false)
-  const inFlightCatalogKeyRef = useRef<string | null>(null)
-  const lastLoadedCatalogKeyRef = useRef<string | null>(null)
-  const catalogAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     setEditProductImage(null)
@@ -127,55 +124,49 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
   }, [editProductImage])
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 400)
+    const t = window.setTimeout(() => {
+      const trimmed = searchInput.trim()
+      setDebouncedSearch(trimmed)
+      setPage(1)
+    }, 400)
     return () => window.clearTimeout(t)
   }, [searchInput])
 
-  useEffect(() => {
-    onLoadingChange?.(loadingCatalog)
-    return () => onLoadingChange?.(false)
-  }, [loadingCatalog, onLoadingChange])
-
-  const loadCatalog = useCallback(async (opts?: { force?: boolean }) => {
-    const qs = new URLSearchParams()
-    qs.set('page', String(page))
-    qs.set('per_page', String(perPage))
-    if (debouncedSearch) qs.set('search_text', debouncedSearch)
-    if (filterBy) qs.set('filter_by', filterBy)
-    const key = qs.toString()
-    if (!opts?.force) {
-      if (inFlightCatalogKeyRef.current === key) return
-      if (lastLoadedCatalogKeyRef.current === key) return
-    }
-    catalogAbortRef.current?.abort()
-    const controller = new AbortController()
-    catalogAbortRef.current = controller
-    inFlightCatalogKeyRef.current = key
-    setLoadingCatalog(true)
-    setCatalogError('')
-    try {
-      const r = await adminFetch<{ items?: ZohoItemRow[]; page_context?: PageCtx }>(`/api/admin/items?${key}`, {
-        signal: controller.signal
-      })
-      if (controller.signal.aborted) return
-      setItems(Array.isArray(r.items) ? r.items : [])
-      setPageCtx(r.page_context ?? null)
-      lastLoadedCatalogKeyRef.current = key
-    } catch (e) {
-      if (controller.signal.aborted) return
-      setCatalogError(e instanceof Error ? e.message : 'Failed to load items')
-      setItems([])
-      setPageCtx(null)
-    } finally {
-      if (inFlightCatalogKeyRef.current === key) inFlightCatalogKeyRef.current = null
-      setLoadingCatalog(false)
-    }
-  }, [page, perPage, debouncedSearch, filterBy])
+  const loadCatalog = useCallback(
+    async (opts?: { signal?: AbortSignal }) => {
+      const signal = opts?.signal
+      setLoadingCatalog(true)
+      setCatalogError('')
+      try {
+        const qs = new URLSearchParams()
+        qs.set('page', String(page))
+        qs.set('per_page', String(perPage))
+        if (debouncedSearch) qs.set('search_text', debouncedSearch)
+        if (filterBy) qs.set('filter_by', filterBy)
+        const r = await adminFetch<{ items?: ZohoItemRow[]; page_context?: PageCtx }>(
+          `/api/admin/items?${qs.toString()}`,
+          signal ? { signal } : {}
+        )
+        if (signal?.aborted) return
+        setItems(Array.isArray(r.items) ? r.items : [])
+        setPageCtx(r.page_context ?? null)
+      } catch (e) {
+        if (signal?.aborted || (e instanceof DOMException && e.name === 'AbortError')) return
+        setCatalogError(e instanceof Error ? e.message : 'Failed to load items')
+        setItems([])
+        setPageCtx(null)
+      } finally {
+        if (!signal?.aborted) setLoadingCatalog(false)
+      }
+    },
+    [page, perPage, debouncedSearch, filterBy]
+  )
 
   useEffect(() => {
-    void loadCatalog()
+    const ac = new AbortController()
+    void loadCatalog({ signal: ac.signal })
+    return () => ac.abort()
   }, [loadCatalog])
-  useEffect(() => () => catalogAbortRef.current?.abort(), [])
 
   const hasNext = pageCtx?.has_more_page === true
   const hasPrev = page > 1
@@ -206,7 +197,7 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
   const selectedProductsCount = selectedProducts.length
 
   async function refreshAfterMutation() {
-    await loadCatalog({ force: true })
+    await loadCatalog()
   }
 
   async function createProduct() {
@@ -281,60 +272,55 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
               className="admin-toolbar__search-input"
               placeholder="Search name, SKU…"
               value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value)
-                setPage(1)
-              }}
+              onChange={(e) => setSearchInput(e.target.value)}
               aria-label="Search products"
             />
           </div>
-          <div className="admin-toolbar__controls">
-            <select
-              className="admin-select"
-              value={filterBy}
-              onChange={(e) => {
-                setFilterBy(e.target.value)
-                setPage(1)
-              }}
-              aria-label="Filter by status or type"
+          <select
+            className="admin-select"
+            value={filterBy}
+            onChange={(e) => {
+              setFilterBy(e.target.value)
+              setPage(1)
+            }}
+            aria-label="Filter by status or type"
+          >
+            {FILTER_OPTIONS.map((o) => (
+              <option key={o.value || 'all'} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="admin-select"
+            value={perPage}
+            onChange={(e) => {
+              setPerPage(Number(e.target.value) as (typeof PER_PAGE_OPTIONS)[number])
+              setPage(1)
+            }}
+            aria-label="Items per page"
+          >
+            {PER_PAGE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n} / page
+              </option>
+            ))}
+          </select>
+          <div className="admin-segmented" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={view === 'grid' ? 'is-active' : ''}
+              onClick={() => setView('grid')}
             >
-              {FILTER_OPTIONS.map((o) => (
-                <option key={o.value || 'all'} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="admin-select"
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(Number(e.target.value) as (typeof PER_PAGE_OPTIONS)[number])
-                setPage(1)
-              }}
-              aria-label="Items per page"
+              Grid
+            </button>
+            <button
+              type="button"
+              className={view === 'table' ? 'is-active' : ''}
+              onClick={() => setView('table')}
             >
-              {PER_PAGE_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n} / page
-                </option>
-              ))}
-            </select>
-            <div className="admin-segmented" role="group" aria-label="View mode">
-              <button
-                type="button"
-                className={view === 'grid' ? 'is-active' : ''}
-                onClick={() => setView('grid')}
-              >
-                Grid
-              </button>
-              <button
-                type="button"
-                className={view === 'table' ? 'is-active' : ''}
-                onClick={() => setView('table')}
-              >
-                Table
-              </button>
-            </div>
+              Table
+            </button>
           </div>
         </div>
 
@@ -554,28 +540,26 @@ export function ProductsSection({ onLoadingChange }: { onLoadingChange?: (loadin
         )}
 
         <nav className="admin-pagination" aria-label="Catalog pages">
-          <div className="admin-pagination__buttons">
-            <button
-              type="button"
-              className="admin-btn admin-btn--ghost"
-              disabled={!hasPrev || loadingCatalog}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              ← Previous
-            </button>
-            <button
-              type="button"
-              className="admin-btn admin-btn--ghost"
-              disabled={!hasNext || loadingCatalog}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next →
-            </button>
-          </div>
+          <button
+            type="button"
+            className="admin-btn admin-btn--ghost"
+            disabled={!hasPrev || loadingCatalog}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </button>
           <span className="admin-pagination__info">
             Page <strong>{pageCtx?.page ?? page}</strong>
             {hasNext ? <span className="admin-muted"> · more available</span> : null}
           </span>
+          <button
+            type="button"
+            className="admin-btn admin-btn--ghost"
+            disabled={!hasNext || loadingCatalog}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </button>
         </nav>
       </section>
 

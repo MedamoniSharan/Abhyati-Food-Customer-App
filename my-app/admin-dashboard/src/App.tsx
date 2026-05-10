@@ -215,7 +215,6 @@ export default function App() {
   const [overview, setOverview] = useState<Overview | null>(null)
   const [loadErr, setLoadErr] = useState('')
   const [pageDataLoading, setPageDataLoading] = useState(false)
-  const [productsLoading, setProductsLoading] = useState(false)
   const [customers, setCustomers] = useState<AuthUser[]>([])
   const [drivers, setDrivers] = useState<
     Array<AuthUser & { zohoContactId?: string; disabled?: boolean }>
@@ -483,7 +482,9 @@ export default function App() {
     () => paginateRows(sortedInvoices, invoicesPage, TABLE_PAGE_SIZE),
     [sortedInvoices, invoicesPage]
   )
-  const isCurrentPageLoading = pageDataLoading || (page === 'products' && productsLoading)
+  /** ProductsSection lives inside this branch; gating on its fetch would unmount it during load,
+   * abort requests, and remount in a loop (many canceled /api/admin/items calls). */
+  const isCurrentPageLoading = pageDataLoading
   /** Calendar buckets for the last 7 days (local time) — fits a trend line better than weekday-of-week totals. */
   const revenueLast7Days = useMemo(() => {
     const today = startOfLocalDay(new Date())
@@ -1488,7 +1489,7 @@ export default function App() {
             </>
           ) : null}
 
-          {page === 'products' ? <ProductsSection onLoadingChange={setProductsLoading} /> : null}
+          {page === 'products' ? <ProductsSection /> : null}
 
           {page === 'settings' ? (
             <>
