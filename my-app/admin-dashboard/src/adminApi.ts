@@ -2,6 +2,17 @@ import { apiUrl } from './apiBase'
 
 const TOKEN_KEY = 'abhyati_admin_jwt'
 
+/** Fired on the window when an admin API returns 401 (expired / invalid JWT). */
+export const ADMIN_SESSION_LOST_EVENT = 'abhyati-admin-session-lost'
+
+function notifyAdminSessionLost(): void {
+  try {
+    window.dispatchEvent(new CustomEvent(ADMIN_SESSION_LOST_EVENT))
+  } catch {
+    /* ignore */
+  }
+}
+
 export function getAdminToken(): string | null {
   try {
     return sessionStorage.getItem(TOKEN_KEY)
@@ -53,15 +64,20 @@ export async function adminLogin(email: string, password: string): Promise<strin
 
 export async function adminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getAdminToken()
-  const headers = new Headers(init.headers)
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
+  if (!token) {
+    throw new Error('Not signed in')
   }
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${token}`)
   if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
     headers.set('Content-Type', 'application/json')
   }
   const res = await fetch(apiUrl(path), { ...init, headers })
   const text = await res.text()
+  if (res.status === 401) {
+    setAdminToken(null)
+    notifyAdminSessionLost()
+  }
   const parsed = parseJsonSafe(text)
   if (!parsed.ok) {
     throw new Error(
@@ -80,18 +96,23 @@ export async function adminFetch<T>(path: string, init: RequestInit = {}): Promi
 /** POST multipart to `/api/admin/items/:id/image` (field name: `image`). */
 export async function adminUploadItemImage(itemId: string, file: File): Promise<void> {
   const token = getAdminToken()
+  if (!token) {
+    throw new Error('Not signed in')
+  }
   const fd = new FormData()
   fd.append('image', file)
   const headers = new Headers()
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
+  headers.set('Authorization', `Bearer ${token}`)
   const res = await fetch(apiUrl(`/api/admin/items/${encodeURIComponent(itemId)}/image`), {
     method: 'POST',
     headers,
     body: fd
   })
   const text = await res.text()
+  if (res.status === 401) {
+    setAdminToken(null)
+    notifyAdminSessionLost()
+  }
   const parsed = parseJsonSafe(text)
   if (!parsed.ok) {
     throw new Error(

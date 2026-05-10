@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { adminFetch, adminLogin, getAdminToken, setAdminToken } from './adminApi'
+import { ADMIN_SESSION_LOST_EVENT, adminFetch, adminLogin, getAdminToken, setAdminToken } from './adminApi'
 import { IconDeleteButton, IconEditButton } from './components/AdminIconButtons'
 import { ProductsSection } from './components/ProductsSection'
 
@@ -206,7 +206,7 @@ function SidebarIcon({
 }
 
 export default function App() {
-  const [token, setTokenState] = useState<string | null>(() => getAdminToken() || 'no-auth')
+  const [token, setTokenState] = useState<string | null>(() => getAdminToken())
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState('')
@@ -375,6 +375,17 @@ export default function App() {
     setPageDataLoading(true)
     void loadPageData()
   }, [token, page, loadPageData])
+
+  useEffect(() => {
+    const onSessionLost = () => {
+      setAdminToken(null)
+      setTokenState(null)
+      setPageDataLoading(false)
+      setLoadErr('')
+    }
+    window.addEventListener(ADMIN_SESSION_LOST_EVENT, onSessionLost)
+    return () => window.removeEventListener(ADMIN_SESSION_LOST_EVENT, onSessionLost)
+  }, [])
 
   const unifiedCustomers = useMemo(() => {
     const appRows: UnifiedCustomerRow[] = customers.map((c) => ({
@@ -572,7 +583,7 @@ export default function App() {
 
   function logout() {
     setAdminToken(null)
-    setTokenState('no-auth')
+    setTokenState(null)
     setPageDataLoading(false)
   }
 
@@ -581,7 +592,7 @@ export default function App() {
       <div className="admin-login">
         <form className="admin-login-card" onSubmit={onLogin}>
           <h1>Abhyati Admin</h1>
-          <p>Sign in with your administrator account.</p>
+          <p>Sign in with your administrator account. Your session stays in this tab until you log out or close it.</p>
           {loginError ? <div className="admin-error">{loginError}</div> : null}
           <input
             className="admin-input"
