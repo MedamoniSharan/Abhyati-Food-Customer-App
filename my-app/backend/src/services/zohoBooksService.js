@@ -41,6 +41,30 @@ export async function searchCustomerByEmail(email) {
   })
 }
 
+export async function findCustomerByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase()
+  if (!normalized) return null
+  const organizationId = await getOrganizationId()
+  const data = await request('get', '/contacts', {
+    params: { organization_id: organizationId, email: normalized, contact_type: 'customer', per_page: 50 }
+  })
+  const contacts = Array.isArray(data?.contacts) ? data.contacts : []
+  return contacts.find((contact) => String(contact?.email || '').trim().toLowerCase() === normalized) || null
+}
+
+export async function ensureCustomerContact({ fullName, email, mobile }) {
+  const existing = await findCustomerByEmail(email)
+  if (existing?.contact_id) {
+    return existing
+  }
+  const created = await createCustomer({
+    contact_name: fullName || email,
+    email,
+    mobile
+  })
+  return created?.contact || null
+}
+
 export async function createCustomer({ contact_name, email, mobile }) {
   const organizationId = await getOrganizationId()
   return request('post', '/contacts', {
@@ -122,6 +146,23 @@ export async function uploadInvoiceAttachment(invoiceId, { buffer, mimetype, ori
     data: form
   })
   return response.data
+}
+
+export async function getInvoiceAttachment(invoiceId) {
+  const organizationId = await getOrganizationId()
+  const accessToken = await getZohoAccessToken()
+  const response = await axios({
+    method: 'get',
+    url: `${env.ZOHO_BOOKS_BASE_URL}/invoices/${encodeURIComponent(invoiceId)}/attachment`,
+    headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+    params: { organization_id: organizationId },
+    responseType: 'arraybuffer'
+  })
+  return {
+    data: Buffer.from(response.data),
+    contentType: response.headers['content-type'] || 'application/octet-stream',
+    contentDisposition: response.headers['content-disposition'] || ''
+  }
 }
 
 export async function createInvoiceForOrder(orderPayload) {

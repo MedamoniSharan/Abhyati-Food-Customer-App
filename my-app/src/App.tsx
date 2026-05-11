@@ -9,7 +9,7 @@ import { HomeScreen } from './screens/HomeScreen'
 import { OrdersScreen } from './screens/OrdersScreen'
 import { ProductDetailsScreen } from './screens/ProductDetailsScreen'
 import type { CartItem, Order, Product, Screen } from './types/app'
-import { fetchZohoItemsPage, getBackendOrders } from './services/backendApi'
+import { createCustomerOrder, downloadOrderProof, fetchZohoItemsPage, getBackendOrders } from './services/backendApi'
 import { fetchAuthMe } from './services/authApi'
 import { checkBackendReachable } from './utils/backendHealth'
 import { clearSignedIn, readAuthToken, readSignedIn, writeSignedIn } from './utils/authSession'
@@ -247,6 +247,31 @@ function App() {
     setScreen('cart')
   }
 
+  async function handleCheckout() {
+    if (cartItems.length === 0) {
+      showToast('Your cart is empty. Add items before checkout.', { variant: 'warning' })
+      return
+    }
+    try {
+      await createCustomerOrder(
+        cartItems.map((line) => ({
+          item_id: line.product.zohoItemId,
+          name: line.product.name,
+          description: line.product.subtitle,
+          quantity: line.quantity,
+          rate: Number(line.product.priceInr) || 0
+        }))
+      )
+      setCartItems([])
+      const latestOrders = await getBackendOrders()
+      setOrderHistory(latestOrders)
+      setScreen('orders')
+      showToast('Order placed successfully and synced to admin.', { variant: 'success' })
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Checkout failed. Please try again.', { variant: 'error' })
+    }
+  }
+
   function renderScreen() {
     if (screen === 'home') {
       return (
@@ -295,7 +320,15 @@ function App() {
             showToast(`Viewing details for Order #${order.id}`, { variant: 'info' })
           }
           onInvoice={(order) =>
-            showToast(`Invoice downloaded for Order #${order.id}`, { variant: 'success' })
+            void (async () => {
+              const invoiceId = order.invoiceId || order.id
+              const ok = await downloadOrderProof(invoiceId)
+              if (ok) {
+                showToast(`Invoice proof downloaded for Order #${order.id}`, { variant: 'success' })
+              } else {
+                showToast('Proof is not available yet for this order.', { variant: 'warning' })
+              }
+            })()
           }
           onReorder={(order) => handleQuickAddFromOrder(order)}
           onQuickAddFromOrder={handleQuickAddFromOrder}
@@ -310,9 +343,7 @@ function App() {
           onBackHome={() => setScreen('home')}
           onIncrease={(productId) => updateCartQuantity(productId, 'increase')}
           onDecrease={(productId) => updateCartQuantity(productId, 'decrease')}
-          onCheckout={() =>
-            showToast('Checkout flow connected. Ready for payment integration.', { variant: 'info' })
-          }
+          onCheckout={() => void handleCheckout()}
         />
       )
     }

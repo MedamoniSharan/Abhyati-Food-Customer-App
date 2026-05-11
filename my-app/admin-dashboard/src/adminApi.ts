@@ -125,3 +125,19 @@ export async function adminUploadItemImage(itemId: string, file: File): Promise<
     throw new Error(msg)
   }
 }
+
+export async function adminDownload(path: string): Promise<Blob> {
+  const token = getAdminToken()
+  if (!token) throw new Error('Not signed in')
+  const headers = new Headers()
+  headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(apiUrl(path), { headers })
+  if (res.status === 401) {
+    setAdminToken(null)
+    notifyAdminSessionLost()
+  }
+  if (!res.ok) {
+    throw new Error(`Request failed (${res.status})`)
+  }
+  return res.blob()
+}

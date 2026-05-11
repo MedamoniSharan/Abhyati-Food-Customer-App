@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ADMIN_SESSION_LOST_EVENT, adminFetch, adminLogin, getAdminToken, setAdminToken } from './adminApi'
+import { ADMIN_SESSION_LOST_EVENT, adminDownload, adminFetch, adminLogin, getAdminToken, setAdminToken } from './adminApi'
 import { IconDeleteButton, IconEditButton } from './components/AdminIconButtons'
 import { ProductsSection } from './components/ProductsSection'
 
@@ -27,6 +27,26 @@ type ZohoInvoiceRow = {
   total?: number
   reference_number?: string
   salesorder_number?: string
+}
+
+type DeliveryAssignmentRow = {
+  id: string
+  invoiceId: string
+  invoiceNumber: string
+  customerName: string
+  customerEmail?: string
+  amount: number
+  status: string
+  driverName?: string
+  driverEmail?: string
+  deliveredAt?: string | null
+  proof?: {
+    recipientName?: string
+    fileName?: string
+    mimeType?: string
+    uploadedAt?: string | null
+    notes?: string
+  } | null
 }
 
 type Overview = {
@@ -259,6 +279,9 @@ export default function App() {
   const [invoicesPage, setInvoicesPage] = useState(1)
   const [invoiceAssignDriverEmail, setInvoiceAssignDriverEmail] = useState('')
   const [assigningInvoiceId, setAssigningInvoiceId] = useState<string | null>(null)
+  const [assignmentsRaw, setAssignmentsRaw] = useState<DeliveryAssignmentRow[]>([])
+  const [assignmentsSortAsc, setAssignmentsSortAsc] = useState(false)
+  const [assignmentsPage, setAssignmentsPage] = useState(1)
 
   const refreshOverview = useCallback(async () => {
     const o = await adminFetch<Overview>('/api/admin/overview')
@@ -297,6 +320,11 @@ export default function App() {
   const refreshInvoices = useCallback(async () => {
     const data = await adminFetch<{ invoices?: ZohoInvoiceRow[] }>('/api/admin/invoices')
     setInvoicesRaw(Array.isArray(data.invoices) ? data.invoices : [])
+  }, [])
+
+  const refreshAssignments = useCallback(async () => {
+    const data = await adminFetch<{ assignments?: DeliveryAssignmentRow[] }>('/api/admin/delivery-assignments')
+    setAssignmentsRaw(Array.isArray(data.assignments) ? data.assignments : [])
   }, [])
 
   const refreshZohoContacts = useCallback(async () => {
@@ -345,7 +373,7 @@ export default function App() {
       }
       if (page === 'drivers') await refreshDrivers()
       if (page === 'deliveries') {
-        await Promise.all([refreshDeliveries(), refreshZohoContacts(), refreshDrivers(), refreshInvoices()])
+        await Promise.all([refreshDeliveries(), refreshZohoContacts(), refreshDrivers(), refreshInvoices(), refreshAssignments()])
       }
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : 'Failed to load')
@@ -363,6 +391,7 @@ export default function App() {
     refreshDeliveries,
     refreshDrivers,
     refreshInvoices,
+    refreshAssignments,
     refreshOverview,
     refreshZohoContacts
   ])
@@ -492,6 +521,20 @@ export default function App() {
   const invoicesPaged = useMemo(
     () => paginateRows(sortedInvoices, invoicesPage, TABLE_PAGE_SIZE),
     [sortedInvoices, invoicesPage]
+  )
+
+  const sortedAssignments = useMemo(
+    () =>
+      [...assignmentsRaw].sort((a, b) => {
+        const da = new Date(a.deliveredAt || a.proof?.uploadedAt || '').getTime()
+        const db = new Date(b.deliveredAt || b.proof?.uploadedAt || '').getTime()
+        return assignmentsSortAsc ? da - db : db - da
+      }),
+    [assignmentsRaw, assignmentsSortAsc]
+  )
+  const assignmentsPaged = useMemo(
+    () => paginateRows(sortedAssignments, assignmentsPage, TABLE_PAGE_SIZE),
+    [sortedAssignments, assignmentsPage]
   )
   /** ProductsSection lives inside this branch; gating on its fetch would unmount it during load,
    * abort requests, and remount in a loop (many canceled /api/admin/items calls). */
@@ -1221,6 +1264,101 @@ export default function App() {
                   className="admin-btn admin-btn--ghost"
                   type="button"
                   onClick={() => setInvoicesPage((p) => Math.min(invoicesPaged.totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+
+              <h3 style={{ marginTop: 24, marginBottom: 8 }}>Assignment tracking & proof</h3>
+              <p style={{ color: 'var(--admin-muted)', fontSize: '0.875rem', maxWidth: 760 }}>
+                This table shows driver assignment status and uploaded proof metadata. Use Download to fetch the proof file
+                from the backend proxy.
+              </p>
+              <div style={{ marginBottom: 12 }}>
+                <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void refreshAssignments()}>
+                  Refresh assignments
+                </button>
+              </div>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th className="admin-th-sortable" onClick={() => setAssignmentsSortAsc((v) => !v)} title="Sort by proof date">
+                        Updated {assignmentsSortAsc ? '▲' : '▼'}
+                      </th>
+                      <th>Invoice #</th>
+                      <th>Customer</th>
+                      <th>Driver</th>
+                      <th>Status</th>
+                      <th>Proof</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignmentsPaged.pageRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ color: 'var(--admin-muted)', padding: '16px 12px' }}>
+                          No assignments found yet.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {assignmentsPaged.pageRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.deliveredAt || row.proof?.uploadedAt || '—'}</td>
+                        <td>{row.invoiceNumber || row.invoiceId}</td>
+                        <td>{row.customerName || row.customerEmail || '—'}</td>
+                        <td>{row.driverName || row.driverEmail || '—'}</td>
+                        <td>{row.status || '—'}</td>
+                        <td>
+                          {row.proof ? (
+                            <span>
+                              {row.proof.fileName || 'proof'}
+                              {row.proof.recipientName ? ` (Recipient: ${row.proof.recipientName})` : ''}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-inline"
+                            disabled={!row.proof}
+                            onClick={async () => {
+                              try {
+                                const blob = await adminDownload(`/api/admin/delivery-assignments/${encodeURIComponent(row.id)}/proof`)
+                                const objectUrl = URL.createObjectURL(blob)
+                                const link = document.createElement('a')
+                                link.href = objectUrl
+                                link.download = row.proof?.fileName || `proof-${row.invoiceNumber || row.id}.jpg`
+                                document.body.appendChild(link)
+                                link.click()
+                                document.body.removeChild(link)
+                                URL.revokeObjectURL(objectUrl)
+                              } catch (e) {
+                                alert(e instanceof Error ? e.message : 'Proof download failed')
+                              }
+                            }}
+                          >
+                            Download
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="admin-table-pagination">
+                <button className="admin-btn admin-btn--ghost" type="button" onClick={() => setAssignmentsPage((p) => Math.max(1, p - 1))}>
+                  Prev
+                </button>
+                <span>
+                  Page {assignmentsPaged.safePage} / {assignmentsPaged.totalPages} ({assignmentsRaw.length} assignments)
+                </span>
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  type="button"
+                  onClick={() => setAssignmentsPage((p) => Math.min(assignmentsPaged.totalPages, p + 1))}
                 >
                   Next
                 </button>

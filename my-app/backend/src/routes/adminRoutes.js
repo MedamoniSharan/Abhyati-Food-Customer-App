@@ -22,6 +22,7 @@ import {
   createModule,
   createSalesOrder,
   deleteModule,
+  getInvoiceAttachment,
   getModuleById,
   listModule,
   updateModule
@@ -29,7 +30,7 @@ import {
 import { signAdminToken } from '../services/jwtService.js'
 import { mapDeliveryStopFromSalesOrder } from '../services/zohoDeliveryMap.js'
 import { uploadItemImageToZoho } from '../services/zohoItemImageService.js'
-import { createAssignment, listAssignments } from '../services/deliveryAssignmentStore.js'
+import { createAssignment, getAssignmentById, listAssignments } from '../services/deliveryAssignmentStore.js'
 
 export const adminRoutes = Router()
 
@@ -360,6 +361,28 @@ adminRoutes.get('/delivery-assignments', (_req, res) => {
   res.json({ assignments: listAssignments() })
 })
 
+adminRoutes.get('/delivery-assignments/:id/proof', async (req, res, next) => {
+  try {
+    const id = z.string().min(1).parse(req.params.id)
+    const row = getAssignmentById(id)
+    if (!row?.proof) {
+      const err = new Error('Proof not found for this assignment')
+      err.statusCode = 404
+      throw err
+    }
+    const attachment = await getInvoiceAttachment(row.invoiceId)
+    if (attachment.contentDisposition) {
+      res.setHeader('Content-Disposition', attachment.contentDisposition)
+    } else {
+      res.setHeader('Content-Disposition', `attachment; filename="${row.proof.fileName || 'proof.jpg'}"`)
+    }
+    res.setHeader('Content-Type', attachment.contentType)
+    res.send(attachment.data)
+  } catch (error) {
+    next(error)
+  }
+})
+
 adminRoutes.post('/delivery-assignments', async (req, res, next) => {
   try {
     const input = assignInvoiceBody.parse(req.body)
@@ -377,6 +400,7 @@ adminRoutes.post('/delivery-assignments', async (req, res, next) => {
       invoiceId: String(invoice.invoice_id || input.invoice_id),
       invoiceNumber: String(invoice.invoice_number || invoice.reference_number || input.invoice_id),
       customerName: String(invoice.customer_name || ''),
+      customerEmail: String(invoice.customer_email || ''),
       amount: Number(invoice.total) || 0,
       address: String(invoice.billing_address?.address || invoice.shipping_address?.address || '')
     })

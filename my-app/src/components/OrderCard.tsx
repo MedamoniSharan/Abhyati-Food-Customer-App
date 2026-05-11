@@ -26,6 +26,8 @@ export function OrderCard({ order, onTrackOrder, onViewDetails, onInvoice, onReo
           </div>
           <h3>Order #{order.id}</h3>
           <p>{order.items}</p>
+          {order.deliveredAt ? <p>Delivered at: {new Date(order.deliveredAt).toLocaleString()}</p> : null}
+          {order.proofAvailable ? <p>Proof uploaded by delivery partner</p> : null}
           <strong>{formatInr(order.amountInr)}</strong>
         </div>
       </div>
@@ -45,7 +47,7 @@ export function OrderCard({ order, onTrackOrder, onViewDetails, onInvoice, onReo
         <div className="delivered-actions">
           <button type="button" className="btn btn-muted" onClick={() => onInvoice(order)}>
             <span className="material-symbols-outlined">receipt_long</span>
-            Download Invoice
+            {order.proofAvailable ? 'Download Proof & Invoice' : 'Download Invoice'}
           </button>
           <button type="button" className="btn btn-dark" onClick={() => onReorder(order)}>
             <span className="material-symbols-outlined">refresh</span>

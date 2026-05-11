@@ -42,7 +42,16 @@ export function listAssignmentsForDriver(driverEmail) {
   return [...assignments.values()].filter((a) => String(a.driverEmail).toLowerCase() === key)
 }
 
-export function createAssignment({ driverEmail, driverName, invoiceId, invoiceNumber, customerName, amount, address }) {
+export function createAssignment({
+  driverEmail,
+  driverName,
+  invoiceId,
+  invoiceNumber,
+  customerName,
+  customerEmail,
+  amount,
+  address
+}) {
   const id = `asg_${Date.now()}_${Math.round(Math.random() * 1000)}`
   const row = {
     id,
@@ -51,6 +60,7 @@ export function createAssignment({ driverEmail, driverName, invoiceId, invoiceNu
     invoiceId: String(invoiceId),
     invoiceNumber: String(invoiceNumber || invoiceId),
     customerName: String(customerName || 'Customer'),
+    customerEmail: String(customerEmail || '').trim().toLowerCase(),
     amount: Number(amount) || 0,
     address: String(address || ''),
     status: 'assigned',

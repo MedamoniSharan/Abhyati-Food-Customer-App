@@ -20,11 +20,21 @@ export type OrderStatus = 'Shipped' | 'Processing' | 'Delivered'
 
 export type Order = {
   id: string
+  invoiceId?: string
+  invoiceNumber?: string
   date: string
   status: OrderStatus
   items: string
   amountInr: number
   image: string
+  deliveredAt?: string | null
+  proofAvailable?: boolean
+  proofMeta?: {
+    fileName?: string
+    mimeType?: string
+    uploadedAt?: string | null
+    recipientName?: string
+  } | null
 }
 
 export type CartItem = {

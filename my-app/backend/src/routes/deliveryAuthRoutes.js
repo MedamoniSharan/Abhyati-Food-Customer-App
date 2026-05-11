@@ -23,6 +23,13 @@ const assignmentStatusSchema = z.object({
   status: z.enum(['accepted', 'in_transit', 'delivered'])
 })
 
+const allowedTransitions = {
+  assigned: ['accepted'],
+  accepted: ['in_transit', 'delivered'],
+  in_transit: ['delivered'],
+  delivered: []
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }
@@ -70,6 +77,11 @@ deliveryAuthRoutes.post('/assignments/:id/accept', (req, res, next) => {
       err.statusCode = 403
       throw err
     }
+    if (String(row.status || 'assigned').toLowerCase() !== 'assigned') {
+      const err = new Error('Assignment is already accepted or completed')
+      err.statusCode = 400
+      throw err
+    }
     const updated = updateAssignment(id, {
       status: 'accepted',
       acceptedAt: new Date().toISOString()
@@ -95,9 +107,16 @@ deliveryAuthRoutes.patch('/assignments/:id/status', (req, res, next) => {
       throw err
     }
     const input = assignmentStatusSchema.parse(req.body)
+    const current = String(row.status || 'assigned').toLowerCase()
+    const nextStatus = String(input.status).toLowerCase()
+    if (current !== nextStatus && !allowedTransitions[current]?.includes(nextStatus)) {
+      const err = new Error(`Invalid status transition from ${current} to ${nextStatus}`)
+      err.statusCode = 400
+      throw err
+    }
     const updated = updateAssignment(id, {
-      status: input.status,
-      ...(input.status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {})
+      status: nextStatus,
+      ...(nextStatus === 'delivered' ? { deliveredAt: new Date().toISOString() } : {})
     })
     res.json({ message: 'Status updated', assignment: updated })
   } catch (error) {
@@ -126,6 +145,7 @@ deliveryAuthRoutes.post('/assignments/:id/proof', upload.single('photo'), async 
       throw err
     }
     const recipientName = typeof req.body?.recipient_name === 'string' ? req.body.recipient_name.trim() : ''
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : ''
     const uploaded = await uploadInvoiceAttachment(row.invoiceId, {
       buffer: file.buffer,
       mimetype: file.mimetype,
@@ -139,6 +159,7 @@ deliveryAuthRoutes.post('/assignments/:id/proof', upload.single('photo'), async 
         fileName: file.originalname || 'signed-invoice.jpg',
         mimeType: file.mimetype,
         uploadedAt: new Date().toISOString(),
+        notes,
         zoho: uploaded
       }
     })
