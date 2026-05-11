@@ -363,7 +363,7 @@ export function ProductsSection() {
                   setSelectedProductIds({})
                   await refreshAfterMutation()
                   if (failures.length > 0) {
-                    alert(`Deleted with ${failures.length} failure(s):\n${failures.join('\n')}`)
+                    toast(`Deleted with ${failures.length} failure(s)`, 'error')
                   }
                 }}
               />
@@ -429,7 +429,7 @@ export function ProductsSection() {
                                 await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
                                 await refreshAfterMutation()
                               } catch (e) {
-                                alert(e instanceof Error ? e.message : 'Failed')
+                                toast(e instanceof Error ? e.message : 'Failed', 'error')
                               }
                             }}
                           />
@@ -535,7 +535,7 @@ export function ProductsSection() {
                                     await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
                                     await refreshAfterMutation()
                                   } catch (e) {
-                                    alert(e instanceof Error ? e.message : 'Failed')
+                                    toast(e instanceof Error ? e.message : 'Failed', 'error')
                                   }
                                 }}
                               />
@@ -616,7 +616,7 @@ export function ProductsSection() {
                     const file = e.dataTransfer.files?.[0]
                     if (!file) return
                     if (!file.type.startsWith('image/')) {
-                      alert('Please drop an image file')
+                      toast('Please drop an image file', 'info')
                       return
                     }
                     setEditProductImage(file)
@@ -721,8 +721,8 @@ export function ProductsSection() {
                         setImageRevByItem((m) => ({ ...m, [id]: String(Date.now()) }))
                         setEditProductImage(null)
                       } catch (imgE) {
-                        alert(
-                          `Saved item, but image upload failed: ${imgE instanceof Error ? imgE.message : 'Unknown'}`
+                        toast(
+                          `Saved item, but image upload failed: ${imgE instanceof Error ? imgE.message : 'Unknown'}`, 'error'
                         )
                         await refreshAfterMutation()
                         return
@@ -731,7 +731,7 @@ export function ProductsSection() {
                     setEditingItem(null)
                     await refreshAfterMutation()
                   } catch (e) {
-                    alert(e instanceof Error ? e.message : 'Failed')
+                    toast(e instanceof Error ? e.message : 'Failed', 'error')
                   }
                 }}
               >
@@ -825,7 +825,7 @@ export function ProductsSection() {
                 const file = e.dataTransfer.files?.[0]
                 if (!file) return
                 if (!file.type.startsWith('image/')) {
-                  alert('Please drop an image file')
+                  toast('Please drop an image file', 'info')
                   return
                 }
                 setNewProductImage(file)

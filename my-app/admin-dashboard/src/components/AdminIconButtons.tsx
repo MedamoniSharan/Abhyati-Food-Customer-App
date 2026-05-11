@@ -32,7 +32,7 @@ export function IconEditButton({ label, onClick, disabled }: Omit<Props, 'varian
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      data-tooltip={label}
+      title={label}
     >
       <IconEdit />
     </button>
@@ -47,7 +47,7 @@ export function IconDeleteButton({ label, onClick, disabled }: Omit<Props, 'vari
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      data-tooltip={label}
+      title={label}
     >
       <IconTrash />
     </button>

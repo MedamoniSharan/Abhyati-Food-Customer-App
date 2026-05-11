@@ -265,6 +265,7 @@ export default function App() {
   const [editingCustomerMobile, setEditingCustomerMobile] = useState('')
   const [editingCustomerPassword, setEditingCustomerPassword] = useState('')
   const [newDriver, setNewDriver] = useState({ fullName: '', email: '', password: '' })
+  const [showAddDriverModal, setShowAddDriverModal] = useState(false)
   const [orderCustomerId, setOrderCustomerId] = useState('')
   const [orderRef, setOrderRef] = useState('')
   const [orderLines, setOrderLines] = useState([{ item_id: '', quantity: '1', rate: '' }])
@@ -1026,46 +1027,11 @@ export default function App() {
             <>
               <h2 style={{ marginTop: 0 }}>Drivers</h2>
               <p style={{ color: 'var(--admin-muted)' }}>
-                Creates a Zoho Books contact (vendor or customer per backend env) plus delivery login.
+                Creates a Zoho Books contact plus delivery login for drivers.
               </p>
-              <div className="admin-form-row">
-                <input
-                  className="admin-input"
-                  placeholder="Full name"
-                  value={newDriver.fullName}
-                  onChange={(e) => setNewDriver((c) => ({ ...c, fullName: e.target.value }))}
-                />
-                <input
-                  className="admin-input"
-                  placeholder="Email"
-                  type="email"
-                  value={newDriver.email}
-                  onChange={(e) => setNewDriver((c) => ({ ...c, email: e.target.value }))}
-                />
-                <input
-                  className="admin-input"
-                  placeholder="Password"
-                  type="password"
-                  value={newDriver.password}
-                  onChange={(e) => setNewDriver((c) => ({ ...c, password: e.target.value }))}
-                />
-                <button
-                  type="button"
-                  className="admin-btn admin-btn-inline"
-                  onClick={async () => {
-                    try {
-                      await adminFetch('/api/admin/drivers', {
-                        method: 'POST',
-                        body: JSON.stringify(newDriver)
-                      })
-                      setNewDriver({ fullName: '', email: '', password: '' })
-                      await refreshDrivers()
-                    } catch (e) {
-                      toast(e instanceof Error ? e.message : 'Failed', 'error')
-                    }
-                  }}
-                >
-                  Add driver
+              <div className="admin-form-row" style={{ justifyContent: 'flex-end' }}>
+                <button type="button" className="admin-btn admin-btn-inline" onClick={() => setShowAddDriverModal(true)}>
+                  Add
                 </button>
               </div>
               <div className="admin-table-wrap">
@@ -1118,7 +1084,7 @@ export default function App() {
                         </td>
                         <td>
                           <IconDeleteButton
-                            label={`Remove driver ${d.email}`}
+                            label="Delete"
                             onClick={async () => {
                               if (!confirm(`Remove driver ${d.email}?`)) return
                               try {
@@ -1734,6 +1700,64 @@ export default function App() {
                         setNewCustomer({ fullName: '', email: '', password: '', mobile: '' })
                         setShowAddCustomerModal(false)
                         await Promise.all([refreshCustomers(), refreshZohoContacts()])
+                      } catch (e) {
+                        toast(e instanceof Error ? e.message : 'Failed', 'error')
+                      }
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {showAddDriverModal ? (
+            <div
+              className="admin-modal-backdrop"
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowAddDriverModal(false)
+              }}
+            >
+              <div className="admin-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
+                <h3 className="admin-modal__title">Add driver</h3>
+                <input
+                  className="admin-input"
+                  placeholder="Full name"
+                  value={newDriver.fullName}
+                  onChange={(e) => setNewDriver((c) => ({ ...c, fullName: e.target.value }))}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Email"
+                  type="email"
+                  value={newDriver.email}
+                  onChange={(e) => setNewDriver((c) => ({ ...c, email: e.target.value }))}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Password (min 6 characters)"
+                  type="password"
+                  value={newDriver.password}
+                  onChange={(e) => setNewDriver((c) => ({ ...c, password: e.target.value }))}
+                />
+                <div className="admin-modal__footer">
+                  <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setShowAddDriverModal(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-inline"
+                    onClick={async () => {
+                      try {
+                        await adminFetch('/api/admin/drivers', {
+                          method: 'POST',
+                          body: JSON.stringify(newDriver)
+                        })
+                        setNewDriver({ fullName: '', email: '', password: '' })
+                        setShowAddDriverModal(false)
+                        await refreshDrivers()
                       } catch (e) {
                         toast(e instanceof Error ? e.message : 'Failed', 'error')
                       }
