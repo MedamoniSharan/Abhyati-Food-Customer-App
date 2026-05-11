@@ -6,6 +6,7 @@ import { customerRoutes } from './routes/customerRoutes.js'
 import { deliveryAuthRoutes } from './routes/deliveryAuthRoutes.js'
 import { env } from './config/env.js'
 import { errorHandler } from './middleware/errorHandler.js'
+import { requestLogger } from './middleware/requestLogger.js'
 import { requireAdmin } from './middleware/requireAdmin.js'
 import { healthRoutes } from './routes/healthRoutes.js'
 import { itemImageRoutes } from './routes/itemImageRoutes.js'
@@ -18,6 +19,7 @@ const app = express()
 app.use(cors({ origin: '*' }))
 
 app.use(express.json({ limit: '1mb' }))
+app.use(requestLogger)
 
 app.use('/health', healthRoutes)
 app.use('/api/auth', authRoutes)

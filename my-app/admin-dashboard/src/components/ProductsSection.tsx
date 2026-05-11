@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { adminFetch, adminUploadItemImage } from '../adminApi'
 import { IconDeleteButton, IconEditButton } from './AdminIconButtons'
+import { useToast } from './Toast'
 import { itemImageUrl, type ZohoItemRow } from '../productImage'
 
 type PageCtx = {
@@ -74,6 +75,7 @@ function UploadIcon() {
 }
 
 export function ProductsSection() {
+  const { toast } = useToast()
   const [view, setView] = useState<'grid' | 'table'>('grid')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState<(typeof PER_PAGE_OPTIONS)[number]>(24)
@@ -203,7 +205,7 @@ export function ProductsSection() {
   async function createProduct() {
     const rate = Number(newProduct.rate)
     if (!newProduct.name.trim() || !Number.isFinite(rate)) {
-      alert('Name and rate are required')
+      toast('Name and rate are required', 'info')
       return
     }
     setCreatingProduct(true)
@@ -244,9 +246,9 @@ export function ProductsSection() {
       if (newProductImageInputRef.current) newProductImageInputRef.current.value = ''
       setShowAddProductModal(false)
       await refreshAfterMutation()
-      alert(`Product created in Zoho Books.${imageErr}`)
+      toast(imageErr ? `Product created.${imageErr}` : 'Product created in Zoho Books')
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      toast(e instanceof Error ? e.message : 'Failed', 'error')
     } finally {
       setCreatingProduct(false)
     }
@@ -400,16 +402,24 @@ export function ProductsSection() {
                       }}
                     >
                       <div className="admin-product-card__media">
-                        {id ? <ItemThumb itemId={id} label={name} cacheBust={imageRevByItem[id]} /> : null}
+                        {id ? <ItemThumb itemId={id} label={name} cacheBust={imageRevByItem[id]} /> : <ItemThumb itemId="" label={name} />}
                       </div>
                       <div className="admin-product-card__body">
-                        <h4 className="admin-product-card__title">{name}</h4>
                         <p className="admin-product-card__meta">
                           {String(it.sku || '—')} · {String(it.product_type || '—')}
                         </p>
+                        <h4 className="admin-product-card__title">{name}</h4>
                         <p className="admin-product-card__price">₹ {String(it.rate ?? '—')}</p>
-                        <p className="admin-product-card__stock">Stock: {readItemStock(it) ?? '—'}</p>
-                        <div className="admin-product-card__actions">
+                        <p className="admin-product-card__stock">
+                          {(() => {
+                            const stock = readItemStock(it)
+                            if (stock === null || stock === undefined) return <span className="admin-stock-badge admin-stock-badge--none">No stock info</span>
+                            if (stock <= 0) return <span className="admin-stock-badge admin-stock-badge--out">Out of stock</span>
+                            if (stock < 10) return <span className="admin-stock-badge admin-stock-badge--low">Low · {stock}</span>
+                            return <span className="admin-stock-badge admin-stock-badge--ok">In stock · {stock}</span>
+                          })()}
+                        </p>
+                        <div className="admin-product-card__actions" onClick={(e) => e.stopPropagation()}>
                           <IconEditButton label={`Edit ${name}`} onClick={() => setEditingItem(it)} />
                           <IconDeleteButton
                             label={`Delete ${name}`}

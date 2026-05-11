@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ADMIN_SESSION_LOST_EVENT, adminDownload, adminFetch, adminLogin, getAdminToken, setAdminToken } from './adminApi'
 import { IconDeleteButton, IconEditButton } from './components/AdminIconButtons'
 import { ProductsSection } from './components/ProductsSection'
+import { useToast } from './components/Toast'
 
 type Page = 'dashboard' | 'customers' | 'drivers' | 'products' | 'deliveries' | 'settings'
 
@@ -141,83 +142,90 @@ function SidebarIcon({
 }: {
   kind: 'dashboard' | 'customers' | 'drivers' | 'products' | 'deliveries' | 'orders' | 'deliver' | 'settings' | 'logout' | 'plus'
 }) {
+  const p = { className: 'admin-nav-icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true as const }
+
   if (kind === 'plus') {
-    return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-    )
+    return (<svg {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>)
   }
   if (kind === 'dashboard') {
     return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <path d="M3 13h8V3H3zM13 21h8v-6h-8zM13 11h8V3h-8zM3 21h8v-6H3z" />
+      <svg {...p}>
+        <rect x="3" y="3" width="7" height="9" rx="1" />
+        <rect x="14" y="3" width="7" height="5" rx="1" />
+        <rect x="14" y="12" width="7" height="9" rx="1" />
+        <rect x="3" y="16" width="7" height="5" rx="1" />
       </svg>
     )
   }
   if (kind === 'customers') {
     return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="8.5" cy="7" r="3.5" />
-        <path d="M20 8v6M23 11h-6" />
+      <svg {...p}>
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     )
   }
   if (kind === 'drivers') {
     return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <circle cx="8" cy="17" r="2" />
-        <circle cx="17" cy="17" r="2" />
-        <path d="M3 17V6h10l4 4h4v7" />
+      <svg {...p}>
+        <rect x="1" y="3" width="15" height="13" rx="2" />
+        <path d="M16 8h4l3 3v5h-7V8z" />
+        <circle cx="5.5" cy="18.5" r="2.5" />
+        <circle cx="18.5" cy="18.5" r="2.5" />
       </svg>
     )
   }
   if (kind === 'products') {
     return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <svg {...p}>
         <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-      </svg>
-    )
-  }
-  if (kind === 'deliveries') {
-    return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <path d="M9 19V6l12-3v13" />
-        <path d="M3 6l12-3" />
-        <path d="M3 6v13l12-3" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
       </svg>
     )
   }
   if (kind === 'orders') {
     return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <path d="M8 6h13M8 12h13M8 18h13" />
-        <circle cx="3.5" cy="6" r="1.5" />
-        <circle cx="3.5" cy="12" r="1.5" />
-        <circle cx="3.5" cy="18" r="1.5" />
+      <svg {...p}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
+      </svg>
+    )
+  }
+  if (kind === 'deliveries') {
+    return (
+      <svg {...p}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
       </svg>
     )
   }
   if (kind === 'deliver') {
     return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <path d="M9 19V6l12-3v13" />
-        <path d="M3 6l12-3" />
-        <path d="M3 6v13l12-3" />
+      <svg {...p}>
+        <path d="M5 12h14" />
+        <path d="M12 5l7 7-7 7" />
       </svg>
     )
   }
   if (kind === 'settings') {
     return (
-      <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <svg {...p}>
         <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.08V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 8.4 19.4a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.08-.4H2.9a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.4a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.08V2.9a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15.6 4.6a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.08.4h.09a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
       </svg>
     )
   }
   return (
-    <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <svg {...p}>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
@@ -226,6 +234,7 @@ function SidebarIcon({
 }
 
 export default function App() {
+  const { toast } = useToast()
   const [token, setTokenState] = useState<string | null>(() => getAdminToken())
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -453,7 +462,7 @@ export default function App() {
   )
   const handleDeleteSelectedCustomers = useCallback(async () => {
     if (selectedAppCustomers.length === 0) {
-      alert('Select at least one app customer to delete.')
+      toast('Select at least one app customer to delete.', 'info')
       return
     }
     const customerEmails = selectedAppCustomers.map((c) => c.email)
@@ -473,9 +482,9 @@ export default function App() {
       })
       await Promise.all([refreshCustomers(), refreshZohoContacts()])
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      toast(e instanceof Error ? e.message : 'Failed', 'error')
     }
-  }, [selectedAppCustomers, refreshCustomers, refreshZohoContacts])
+  }, [selectedAppCustomers, refreshCustomers, refreshZohoContacts, toast])
   const sortedDrivers = useMemo(
     () =>
       [...drivers].sort((a, b) =>
@@ -977,7 +986,7 @@ export default function App() {
                                     })
                                     await Promise.all([refreshCustomers(), refreshZohoContacts()])
                                   } catch (e) {
-                                    alert(e instanceof Error ? e.message : 'Failed')
+                                    toast(e instanceof Error ? e.message : 'Failed', 'error')
                                   }
                                 }}
                               />
@@ -1052,7 +1061,7 @@ export default function App() {
                       setNewDriver({ fullName: '', email: '', password: '' })
                       await refreshDrivers()
                     } catch (e) {
-                      alert(e instanceof Error ? e.message : 'Failed')
+                      toast(e instanceof Error ? e.message : 'Failed', 'error')
                     }
                   }}
                 >
@@ -1118,7 +1127,7 @@ export default function App() {
                                 })
                                 await refreshDrivers()
                               } catch (e) {
-                                alert(e instanceof Error ? e.message : 'Failed')
+                                toast(e instanceof Error ? e.message : 'Failed', 'error')
                               }
                             }}
                           />
@@ -1181,6 +1190,7 @@ export default function App() {
                   </select>
                 </label>
                 <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void refreshInvoices()}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
                   Refresh invoices
                 </button>
               </div>
@@ -1226,7 +1236,7 @@ export default function App() {
                               disabled={!id || assigningInvoiceId === id}
                               onClick={async () => {
                                 if (!invoiceAssignDriverEmail) {
-                                  alert('Choose a driver first')
+                                  toast('Choose a driver first', 'info')
                                   return
                                 }
                                 if (!id) return
@@ -1236,15 +1246,17 @@ export default function App() {
                                     method: 'POST',
                                     body: JSON.stringify({ driver_email: invoiceAssignDriverEmail, invoice_id: id })
                                   })
-                                  alert('Invoice assigned to driver')
+                                  toast('Invoice assigned to driver')
+                                  void refreshAssignments()
                                 } catch (e) {
-                                  alert(e instanceof Error ? e.message : 'Assign failed')
+                                  toast(e instanceof Error ? e.message : 'Assign failed', 'error')
                                 } finally {
                                   setAssigningInvoiceId(null)
                                 }
                               }}
                             >
-                              {assigningInvoiceId === id ? '…' : 'Assign'}
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="3.5"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                              {assigningInvoiceId === id ? 'Assigning...' : 'Assign'}
                             </button>
                           </td>
                         </tr>
@@ -1269,14 +1281,14 @@ export default function App() {
                 </button>
               </div>
 
-              <h3 style={{ marginTop: 24, marginBottom: 8 }}>Assignment tracking & proof</h3>
-              <p style={{ color: 'var(--admin-muted)', fontSize: '0.875rem', maxWidth: 760 }}>
-                This table shows driver assignment status and uploaded proof metadata. Use Download to fetch the proof file
-                from the backend proxy.
+              <h3 style={{ marginTop: 28, marginBottom: 6 }}>Assignment tracking & proof</h3>
+              <p style={{ color: 'var(--admin-muted)', fontSize: '0.8125rem', maxWidth: 760, lineHeight: 1.55, marginBottom: 14 }}>
+                Track driver assignment status and uploaded proof-of-delivery metadata. Download proof files directly from this table.
               </p>
-              <div style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 14 }}>
                 <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void refreshAssignments()}>
-                  Refresh assignments
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                  Refresh
                 </button>
               </div>
               <div className="admin-table-wrap">
@@ -1297,54 +1309,63 @@ export default function App() {
                   <tbody>
                     {assignmentsPaged.pageRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ color: 'var(--admin-muted)', padding: '16px 12px' }}>
-                          No assignments found yet.
+                        <td colSpan={7} style={{ color: 'var(--admin-muted)', padding: '24px 12px', textAlign: 'center' }}>
+                          No assignments found yet. Assign an invoice above to get started.
                         </td>
                       </tr>
                     ) : null}
-                    {assignmentsPaged.pageRows.map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.deliveredAt || row.proof?.uploadedAt || '—'}</td>
-                        <td>{row.invoiceNumber || row.invoiceId}</td>
-                        <td>{row.customerName || row.customerEmail || '—'}</td>
-                        <td>{row.driverName || row.driverEmail || '—'}</td>
-                        <td>{row.status || '—'}</td>
-                        <td>
-                          {row.proof ? (
-                            <span>
-                              {row.proof.fileName || 'proof'}
-                              {row.proof.recipientName ? ` (Recipient: ${row.proof.recipientName})` : ''}
-                            </span>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn-inline"
-                            disabled={!row.proof}
-                            onClick={async () => {
-                              try {
-                                const blob = await adminDownload(`/api/admin/delivery-assignments/${encodeURIComponent(row.id)}/proof`)
-                                const objectUrl = URL.createObjectURL(blob)
-                                const link = document.createElement('a')
-                                link.href = objectUrl
-                                link.download = row.proof?.fileName || `proof-${row.invoiceNumber || row.id}.jpg`
-                                document.body.appendChild(link)
-                                link.click()
-                                document.body.removeChild(link)
-                                URL.revokeObjectURL(objectUrl)
-                              } catch (e) {
-                                alert(e instanceof Error ? e.message : 'Proof download failed')
-                              }
-                            }}
-                          >
-                            Download
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {assignmentsPaged.pageRows.map((row) => {
+                      const statusKey = String(row.status || 'assigned').toLowerCase().replace(/\s+/g, '_')
+                      const statusLabel = statusKey === 'assigned' ? 'Assigned' : statusKey === 'accepted' ? 'Accepted' : statusKey === 'in_transit' ? 'In Transit' : statusKey === 'delivered' ? 'Delivered' : row.status || '—'
+                      return (
+                        <tr key={row.id}>
+                          <td style={{ fontSize: '0.8125rem', color: 'var(--admin-muted)' }}>
+                            {row.deliveredAt ? new Date(row.deliveredAt).toLocaleDateString() : row.proof?.uploadedAt ? new Date(row.proof.uploadedAt).toLocaleDateString() : '—'}
+                          </td>
+                          <td style={{ fontWeight: 600 }}>{row.invoiceNumber || row.invoiceId}</td>
+                          <td>{row.customerName || row.customerEmail || '—'}</td>
+                          <td>{row.driverName || row.driverEmail || '—'}</td>
+                          <td>
+                            <span className={`admin-pill admin-pill--${statusKey}`}>{statusLabel}</span>
+                          </td>
+                          <td style={{ fontSize: '0.8125rem' }}>
+                            {row.proof ? (
+                              <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <span style={{ fontWeight: 500 }}>{row.proof.fileName || 'proof.jpg'}</span>
+                                {row.proof.recipientName ? <span style={{ color: 'var(--admin-muted)', fontSize: '0.75rem' }}>Signed by {row.proof.recipientName}</span> : null}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--admin-muted)' }}>Pending</span>
+                            )}
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn--ghost admin-btn-inline"
+                              disabled={!row.proof}
+                              onClick={async () => {
+                                try {
+                                  const blob = await adminDownload(`/api/admin/delivery-assignments/${encodeURIComponent(row.id)}/proof`)
+                                  const objectUrl = URL.createObjectURL(blob)
+                                  const link = document.createElement('a')
+                                  link.href = objectUrl
+                                  link.download = row.proof?.fileName || `proof-${row.invoiceNumber || row.id}.jpg`
+                                  document.body.appendChild(link)
+                                  link.click()
+                                  document.body.removeChild(link)
+                                  URL.revokeObjectURL(objectUrl)
+                                } catch (e) {
+                                  toast(e instanceof Error ? e.message : 'Proof download failed', 'error')
+                                }
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                              Download
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1458,7 +1479,7 @@ export default function App() {
                     className="admin-btn admin-btn-inline"
                     onClick={async () => {
                       if (!orderCustomerId) {
-                        alert('Choose a Zoho customer')
+                        toast('Choose a Zoho customer', 'info')
                         return
                       }
                       const lines = orderLines
@@ -1469,7 +1490,7 @@ export default function App() {
                           rate: Number(l.rate) || 0
                         }))
                       if (lines.length === 0) {
-                        alert('Add at least one line with an item')
+                        toast('Add at least one line with an item', 'info')
                         return
                       }
                       try {
@@ -1484,9 +1505,9 @@ export default function App() {
                         setOrderRef('')
                         setOrderLines([{ item_id: '', quantity: '1', rate: '' }])
                         await refreshDeliveries()
-                        alert('Sales order created in Zoho Books')
+                        toast('Sales order created in Zoho Books')
                       } catch (e) {
-                        alert(e instanceof Error ? e.message : 'Failed')
+                        toast(e instanceof Error ? e.message : 'Failed', 'error')
                       }
                     }}
                   >
@@ -1714,7 +1735,7 @@ export default function App() {
                         setShowAddCustomerModal(false)
                         await Promise.all([refreshCustomers(), refreshZohoContacts()])
                       } catch (e) {
-                        alert(e instanceof Error ? e.message : 'Failed')
+                        toast(e instanceof Error ? e.message : 'Failed', 'error')
                       }
                     }}
                   >
@@ -1787,7 +1808,7 @@ export default function App() {
                         } else {
                           const original = customers.find((c) => c.id === editingCustomer.id)
                           if (!original) {
-                            alert('Customer not found in current list')
+                            toast('Customer not found in current list', 'error')
                             return
                           }
                           await adminFetch(`/api/admin/customers/${encodeURIComponent(original.email)}`, {
@@ -1805,7 +1826,7 @@ export default function App() {
                         setEditingCustomerPassword('')
                         await Promise.all([refreshCustomers(), refreshZohoContacts()])
                       } catch (e) {
-                        alert(e instanceof Error ? e.message : 'Failed')
+                        toast(e instanceof Error ? e.message : 'Failed', 'error')
                       }
                     }}
                   >
