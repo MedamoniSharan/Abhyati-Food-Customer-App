@@ -131,6 +131,14 @@ export async function deleteModule(modulePath, id, query = {}) {
   })
 }
 
+/** Zoho Books: POST /items/{id}/inactive — used when hard delete is not allowed (e.g. item on transactions). */
+export async function markZohoItemInactive(itemId) {
+  const organizationId = await getOrganizationId()
+  return request('post', `/items/${encodeURIComponent(itemId)}/inactive`, {
+    params: { organization_id: organizationId }
+  })
+}
+
 export async function uploadInvoiceAttachment(invoiceId, { buffer, mimetype, originalname }) {
   const organizationId = await getOrganizationId()
   const accessToken = await getZohoAccessToken()

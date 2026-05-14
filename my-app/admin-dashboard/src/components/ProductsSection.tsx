@@ -22,6 +22,25 @@ const FILTER_OPTIONS = [
 
 const STOCK_KEYS = ['stock_on_hand', 'available_stock', 'actual_available_stock', 'opening_stock'] as const
 
+/** Zoho list/detail rows should include `item_id`; if not, save must not silently no-op. */
+function resolveItemId(item: ZohoItemRow | null | undefined): string {
+  if (!item) return ''
+  const raw = item.item_id
+  if (raw == null) return ''
+  const id = String(raw).trim()
+  return id
+}
+
+/** Zoho item GET/PUT responses are usually `{ item: {...} }`; accept a bare item object too. */
+function extractZohoItemFromItemResponse(data: unknown): ZohoItemRow | undefined {
+  if (!data || typeof data !== 'object') return undefined
+  const o = data as Record<string, unknown>
+  const nested = o.item
+  if (nested && typeof nested === 'object') return nested as ZohoItemRow
+  if (o.item_id != null || typeof o.name === 'string' || 'rate' in o) return o as ZohoItemRow
+  return undefined
+}
+
 function readItemStock(item: ZohoItemRow | null | undefined): number | null {
   if (!item) return null
   for (const key of STOCK_KEYS) {
@@ -200,7 +219,7 @@ export function ProductsSection() {
   const showCatalogSkeleton = loadingCatalog && items.length === 0
   const skeletonCardCount = Math.max(6, Math.min(perPage, 12))
   const selectedProducts = useMemo(
-    () => sortedItems.filter((it) => selectedProductIds[String(it.item_id ?? '')]),
+    () => sortedItems.filter((it) => selectedProductIds[resolveItemId(it)]),
     [sortedItems, selectedProductIds]
   )
   const selectedProductsCount = selectedProducts.length
@@ -357,13 +376,20 @@ export function ProductsSection() {
                 disabled={selectedProductsCount === 0}
                 onClick={async () => {
                   if (selectedProductsCount === 0) return
-                  const ids = selectedProducts.map((it) => String(it.item_id ?? '')).filter(Boolean)
-                  if (ids.length === 0) return
+                  const ids = selectedProducts.map((it) => resolveItemId(it)).filter(Boolean)
+                  if (ids.length === 0) {
+                    toast('Cannot delete: selected rows have no Zoho item id.', 'error')
+                    return
+                  }
                   if (!confirm(`Delete ${ids.length} selected product(s) from Zoho?`)) return
                   const failures: string[] = []
+                  let deactivated = 0
                   for (const id of ids) {
                     try {
-                      await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+                      const r = await adminFetch<Record<string, unknown>>(`/api/admin/items/${encodeURIComponent(id)}`, {
+                        method: 'DELETE'
+                      })
+                      if (r?.deactivated_instead_of_delete) deactivated += 1
                     } catch (e) {
                       failures.push(`${id}: ${e instanceof Error ? e.message : 'Failed'}`)
                     }
@@ -371,7 +397,15 @@ export function ProductsSection() {
                   setSelectedProductIds({})
                   await refreshAfterMutation()
                   if (failures.length > 0) {
-                    toast(`Deleted with ${failures.length} failure(s)`, 'error')
+                    toast(`Some deletes failed (${failures.length}). ${failures.slice(0, 3).join('; ')}`, 'error')
+                  } else if (deactivated > 0) {
+                    toast(
+                      deactivated === ids.length
+                        ? `${deactivated} item(s) could not be deleted (in use). Marked inactive in Zoho instead.`
+                        : `${deactivated} marked inactive (in use); ${ids.length - deactivated} deleted.`
+                    )
+                  } else {
+                    toast(`${ids.length} product(s) deleted from Zoho`)
                   }
                 }}
               />
@@ -393,7 +427,7 @@ export function ProductsSection() {
                   </article>
                 ))
               : sortedItems.map((it) => {
-                  const id = String(it.item_id ?? '')
+                  const id = resolveItemId(it)
                   const name = String(it.name ?? 'Item')
                   return (
                     <article
@@ -432,10 +466,31 @@ export function ProductsSection() {
                           <IconDeleteButton
                             label={`Delete ${name}`}
                             onClick={async () => {
-                              if (!id || !confirm(`Delete “${name}” from Zoho?`)) return
+                              if (!id) {
+                                toast('Cannot delete: this row has no Zoho item id.', 'error')
+                                return
+                              }
+                              if (!confirm(`Delete “${name}” from Zoho?`)) return
                               try {
-                                await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+                                const r = await adminFetch<Record<string, unknown>>(
+                                  `/api/admin/items/${encodeURIComponent(id)}`,
+                                  { method: 'DELETE' }
+                                )
+                                if (r?.deactivated_instead_of_delete) {
+                                  setItems((prev) =>
+                                    prev.map((row) =>
+                                      resolveItemId(row) === id ? { ...row, status: 'inactive' } : row
+                                    )
+                                  )
+                                } else {
+                                  setItems((prev) => prev.filter((row) => resolveItemId(row) !== id))
+                                }
                                 await refreshAfterMutation()
+                                toast(
+                                  r?.deactivated_instead_of_delete && typeof r.message === 'string'
+                                    ? String(r.message)
+                                    : 'Product deleted from Zoho'
+                                )
                               } catch (e) {
                                 toast(e instanceof Error ? e.message : 'Failed', 'error')
                               }
@@ -455,11 +510,14 @@ export function ProductsSection() {
                   <th>
                     <input
                       type="checkbox"
-                      checked={sortedItems.length > 0 && sortedItems.every((it) => selectedProductIds[String(it.item_id ?? '')])}
+                      checked={sortedItems.length > 0 && sortedItems.every((it) => !resolveItemId(it) || selectedProductIds[resolveItemId(it)])}
                       onChange={(e) =>
                         setSelectedProductIds(() => {
                           const next: Record<string, boolean> = {}
-                          for (const it of sortedItems) next[String(it.item_id ?? '')] = e.target.checked
+                          for (const it of sortedItems) {
+                            const rid = resolveItemId(it)
+                            if (rid) next[rid] = e.target.checked
+                          }
                           return next
                         })
                       }
@@ -498,8 +556,8 @@ export function ProductsSection() {
                       </tr>
                     ))
                   : sortedItems.map((it) => {
-                      const id = String(it.item_id ?? '')
-                      const name = String(it.name ?? '')
+                      const id = resolveItemId(it)
+                      const name = String(it.name ?? 'Item')
                       return (
                         <tr key={id || name} className="admin-table-row-clickable" onClick={() => setEditingItem(it)}>
                           <td>
@@ -507,7 +565,13 @@ export function ProductsSection() {
                               type="checkbox"
                               checked={!!selectedProductIds[id]}
                               onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => setSelectedProductIds((prev) => ({ ...prev, [id]: e.target.checked }))}
+                              onChange={(e) =>
+                                setSelectedProductIds((prev) => {
+                                  const rid = resolveItemId(it)
+                                  if (!rid) return prev
+                                  return { ...prev, [rid]: e.target.checked }
+                                })
+                              }
                             />
                           </td>
                           <td>
@@ -538,10 +602,31 @@ export function ProductsSection() {
                               <IconDeleteButton
                                 label={`Delete ${name}`}
                                 onClick={async () => {
-                                  if (!id || !confirm(`Delete “${name}” from Zoho?`)) return
+                                  if (!id) {
+                                    toast('Cannot delete: this row has no Zoho item id.', 'error')
+                                    return
+                                  }
+                                  if (!confirm(`Delete “${name}” from Zoho?`)) return
                                   try {
-                                    await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+                                    const r = await adminFetch<Record<string, unknown>>(
+                                      `/api/admin/items/${encodeURIComponent(id)}`,
+                                      { method: 'DELETE' }
+                                    )
+                                    if (r?.deactivated_instead_of_delete) {
+                                      setItems((prev) =>
+                                        prev.map((row) =>
+                                          resolveItemId(row) === id ? { ...row, status: 'inactive' } : row
+                                        )
+                                      )
+                                    } else {
+                                      setItems((prev) => prev.filter((row) => resolveItemId(row) !== id))
+                                    }
                                     await refreshAfterMutation()
+                                    toast(
+                                      r?.deactivated_instead_of_delete && typeof r.message === 'string'
+                                        ? String(r.message)
+                                        : 'Product deleted from Zoho'
+                                    )
                                   } catch (e) {
                                     toast(e instanceof Error ? e.message : 'Failed', 'error')
                                   }
@@ -591,16 +676,16 @@ export function ProductsSection() {
         >
           <div className="admin-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal>
             <h3 className="admin-modal__title">Edit item</h3>
-            {String(editingItem.item_id ?? '') ? (
+            {resolveItemId(editingItem) ? (
               <div className="admin-modal__thumb-row">
                 <div className="admin-modal__thumb-preview">
                   {editImageObjectUrl ? (
                     <img className="admin-item-thumb" src={editImageObjectUrl} alt="" />
                   ) : (
                     <ItemThumb
-                      itemId={String(editingItem.item_id)}
+                      itemId={resolveItemId(editingItem)}
                       label={String(editingItem.name ?? '')}
-                      cacheBust={imageRevByItem[String(editingItem.item_id)]}
+                      cacheBust={imageRevByItem[resolveItemId(editingItem)]}
                     />
                   )}
                 </div>
@@ -707,13 +792,16 @@ export function ProductsSection() {
               <button
                 type="button"
                 className="admin-btn admin-btn-inline"
-                disabled={savingProduct}
+                disabled={savingProduct || !resolveItemId(editingItem)}
                 onClick={async () => {
-                  const id = String(editingItem.item_id ?? '')
-                  if (!id) return
+                  const id = resolveItemId(editingItem)
+                  if (!id) {
+                    toast('Cannot save: this row has no Zoho item id. Refresh the list or re-open the item.', 'error')
+                    return
+                  }
                   setSavingProduct(true)
                   try {
-                    const resData = await adminFetch<{ item?: ZohoItemRow }>(`/api/admin/items/${encodeURIComponent(id)}`, {
+                    const resData = await adminFetch<unknown>(`/api/admin/items/${encodeURIComponent(id)}`, {
                       method: 'PUT',
                       body: JSON.stringify({
                         name: editingItem.name,
@@ -737,9 +825,11 @@ export function ProductsSection() {
                       }
                     }
                     toast('Product saved successfully')
-                    const merged = resData?.item
-                    if (merged && typeof merged === 'object') {
-                      setItems((prev) => prev.map((it) => (String(it.item_id) === id ? { ...it, ...merged } : it)))
+                    const merged = extractZohoItemFromItemResponse(resData)
+                    if (merged) {
+                      setItems((prev) =>
+                        prev.map((it) => (resolveItemId(it) === id ? { ...it, ...merged } : it))
+                      )
                     }
                     setEditingItem(null)
                     void refreshAfterMutation()

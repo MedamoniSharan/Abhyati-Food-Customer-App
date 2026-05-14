@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { Router } from 'express'
 import multer from 'multer'
 import { z } from 'zod'
@@ -25,6 +26,7 @@ import {
   getInvoiceAttachment,
   getModuleById,
   listModule,
+  markZohoItemInactive,
   updateModule
 } from '../services/zohoBooksService.js'
 import { signAdminToken } from '../services/jwtService.js'
@@ -107,56 +109,81 @@ function stripStockFieldsFromBody(body) {
   return clean
 }
 
+/** Zoho refuses hard-delete when an item is referenced on transactions; we fall back to inactive. */
+function shouldFallbackItemDeleteToInactive(zohoBody) {
+  if (!zohoBody || typeof zohoBody !== 'object') return false
+  const msg = String(zohoBody.message || zohoBody.error || '').toLowerCase()
+  if (!msg) return false
+  return (
+    msg.includes('cannot be deleted') ||
+    msg.includes('part of a transaction') ||
+    msg.includes('part of transaction') ||
+    (msg.includes('transaction') && msg.includes('delete')) ||
+    (msg.includes('associated') && msg.includes('transaction'))
+  )
+}
+
+/**
+ * Build `locations[]` for a PUT so primary (or first) row gets `targetQty` on hand.
+ * Used together with other item fields in **one** PUT — a second PUT with only `locations`
+ * can overwrite name/rate on APIs that treat the body as a full replace.
+ */
+function buildZohoItemLocationsForStock(existingItem, targetQty) {
+  const locs = existingItem?.locations
+  if (!Array.isArray(locs) || locs.length === 0) return null
+  const primaryIdx = locs.findIndex((l) => l && (l.is_primary === true || l.is_primary === 'true'))
+  const idx = primaryIdx >= 0 ? primaryIdx : 0
+  return locs.map((loc, j) => {
+    if (!loc || typeof loc !== 'object') return { location_id: String(loc.location_id) }
+    const base = {
+      location_id: String(loc.location_id),
+      ...(loc.location_name != null && loc.location_name !== '' ? { location_name: loc.location_name } : {}),
+      ...(loc.status != null && loc.status !== '' ? { status: loc.status } : {}),
+      ...(loc.is_primary != null ? { is_primary: loc.is_primary } : {})
+    }
+    if (j === idx) {
+      return { ...base, location_stock_on_hand: String(targetQty) }
+    }
+    const keep = loc.location_stock_on_hand
+    return keep != null && keep !== '' ? { ...base, location_stock_on_hand: String(keep) } : base
+  })
+}
+
 /**
  * Zoho often ignores plain `stock_on_hand` on item PUT when warehousing/locations are used.
- * Prefer inventory adjustment (needs ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID); else PATCH locations.
+ * Prefer inventory adjustment (needs ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID); else merge locations into the same item PUT as `cleanBody`.
  */
-async function applyZohoItemStock(id, existingItem, targetQty) {
+async function applyZohoItemStockAndMetadata(id, existingItem, targetQty, cleanBody) {
   const accountId = env.ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID
   const current = readZohoItemQuantity(existingItem)
 
   if (accountId && current !== null) {
+    const data = await updateModule('/items', id, cleanBody)
     const delta = targetQty - current
-    if (delta === 0) return
-    const today = new Date().toISOString().slice(0, 10)
-    await createModule('/inventoryadjustments', {
-      date: today,
-      reason: `Admin — stock update (item ${id})`,
-      adjustment_type: 'quantity',
-      line_items: [
-        {
-          item_id: String(id),
-          quantity_adjusted: String(delta),
-          adjustment_account_id: accountId
-        }
-      ]
-    })
-    return
+    if (delta !== 0) {
+      const today = new Date().toISOString().slice(0, 10)
+      await createModule('/inventoryadjustments', {
+        date: today,
+        reason: `Admin — stock update (item ${id})`,
+        adjustment_type: 'quantity',
+        line_items: [
+          {
+            item_id: String(id),
+            quantity_adjusted: String(delta),
+            adjustment_account_id: accountId
+          }
+        ]
+      })
+    }
+    return data
   }
 
-  const locs = existingItem?.locations
-  if (Array.isArray(locs) && locs.length > 0) {
-    const primaryIdx = locs.findIndex((l) => l && (l.is_primary === true || l.is_primary === 'true'))
-    const idx = primaryIdx >= 0 ? primaryIdx : 0
-    const newLocs = locs.map((loc, j) => {
-      if (!loc || typeof loc !== 'object') return { location_id: String(loc.location_id) }
-      const base = {
-        location_id: String(loc.location_id),
-        ...(loc.location_name != null && loc.location_name !== '' ? { location_name: loc.location_name } : {}),
-        ...(loc.status != null && loc.status !== '' ? { status: loc.status } : {}),
-        ...(loc.is_primary != null ? { is_primary: loc.is_primary } : {})
-      }
-      if (j === idx) {
-        return { ...base, location_stock_on_hand: String(targetQty) }
-      }
-      const keep = loc.location_stock_on_hand
-      return keep != null && keep !== '' ? { ...base, location_stock_on_hand: String(keep) } : base
-    })
-    await updateModule('/items', id, { locations: newLocs })
-    return
+  const newLocs = buildZohoItemLocationsForStock(existingItem, targetQty)
+  if (newLocs) {
+    return updateModule('/items', id, { ...cleanBody, locations: newLocs })
   }
 
-  await updateModule('/items', id, { stock_on_hand: targetQty })
+  return updateModule('/items', id, { ...cleanBody, stock_on_hand: targetQty })
 }
 
 const loginSchema = z.object({
@@ -733,14 +760,15 @@ adminRoutes.put('/items/:id', async (req, res, next) => {
       }
     }
 
-    const data = await updateModule('/items', id, cleanBody)
-    appendAdminAudit({ action: 'admin_update_item', meta: { id } })
-
+    let data
     if (targetStock != null && existingItem) {
-      await applyZohoItemStock(id, existingItem, targetStock)
+      data = await applyZohoItemStockAndMetadata(id, existingItem, targetStock, cleanBody)
     } else if (targetStock != null) {
-      await updateModule('/items', id, { stock_on_hand: targetStock })
+      data = await updateModule('/items', id, { ...cleanBody, stock_on_hand: targetStock })
+    } else {
+      data = await updateModule('/items', id, cleanBody)
     }
+    appendAdminAudit({ action: 'admin_update_item', meta: { id } })
 
     try {
       const fresh = await getModuleById('/items', id)
@@ -756,9 +784,28 @@ adminRoutes.put('/items/:id', async (req, res, next) => {
 adminRoutes.delete('/items/:id', async (req, res, next) => {
   try {
     const id = z.string().min(1).parse(req.params.id)
-    const data = await deleteModule('/items', id)
-    appendAdminAudit({ action: 'admin_delete_item', meta: { id } })
-    res.json(data)
+    try {
+      const data = await deleteModule('/items', id)
+      appendAdminAudit({ action: 'admin_delete_item', meta: { id } })
+      return res.json(data)
+    } catch (err) {
+      if (!axios.isAxiosError(err)) throw err
+      const zohoBody = err.response?.data
+      if (shouldFallbackItemDeleteToInactive(zohoBody)) {
+        const data = await markZohoItemInactive(id)
+        appendAdminAudit({ action: 'admin_deactivate_item', meta: { id, reason: 'zoho_refused_delete' } })
+        const hint =
+          typeof zohoBody?.message === 'string' && zohoBody.message.trim()
+            ? `${zohoBody.message.trim()} It was marked inactive in Zoho instead.`
+            : 'This item cannot be deleted while it is linked to transactions. It was marked inactive in Zoho instead.'
+        return res.json({
+          ...data,
+          deactivated_instead_of_delete: true,
+          message: hint
+        })
+      }
+      throw err
+    }
   } catch (error) {
     next(error)
   }
