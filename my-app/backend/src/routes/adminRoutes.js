@@ -19,10 +19,12 @@ import {
   setDriverDisabled
 } from '../services/driverStore.js'
 import {
-  createCustomer,
   createModule,
   createSalesOrder,
   deleteModule,
+  ensureCustomerContact,
+  ensureDriverContact,
+  findCustomerByEmail,
   getInvoiceAttachment,
   getModuleById,
   listModule,
@@ -296,14 +298,17 @@ adminRoutes.get('/customers', (_req, res) => {
 
 adminRoutes.post('/customers', async (req, res, next) => {
   let contactId
+  let zohoCreatedThisRequest = false
   try {
     const input = createCustomerBody.parse(req.body)
-    const zoho = await createCustomer({
-      contact_name: input.fullName,
+    const priorZoho = await findCustomerByEmail(input.email)
+    zohoCreatedThisRequest = !priorZoho?.contact_id
+    const contact = await ensureCustomerContact({
+      fullName: input.fullName,
       email: input.email,
       mobile: input.mobile
     })
-    contactId = zoho?.contact?.contact_id
+    contactId = contact?.contact_id
     if (!contactId) {
       const err = new Error('Zoho did not return a customer contact id')
       err.statusCode = 502
@@ -317,14 +322,16 @@ adminRoutes.post('/customers', async (req, res, next) => {
       })
       appendAdminAudit({
         action: 'admin_create_customer',
-        meta: { email: user.email, zohoContactId: contactId }
+        meta: { email: user.email, zohoContactId: contactId, zohoExisted: !zohoCreatedThisRequest }
       })
       res.status(201).json({ message: 'Customer created', user, zoho_contact_id: contactId })
     } catch (error) {
-      try {
-        await deleteOrDeactivateZohoContact(contactId)
-      } catch {
-        /* best-effort rollback */
+      if (zohoCreatedThisRequest) {
+        try {
+          await deleteOrDeactivateZohoContact(contactId)
+        } catch {
+          /* best-effort rollback */
+        }
       }
       throw error
     }
@@ -538,32 +545,39 @@ adminRoutes.post('/delivery-assignments', async (req, res, next) => {
 })
 
 adminRoutes.post('/drivers', async (req, res, next) => {
+  let contactId
+  let zohoCreatedThisRequest = false
   try {
     const input = createDriverBody.parse(req.body)
-    const zohoPayload = {
-      contact_name: input.fullName,
-      contact_type: env.DRIVER_ZOHO_CONTACT_TYPE,
-      email: input.email
-    }
-    const zoho = await createModule('/contacts', zohoPayload)
-    const contact = zoho.contact || zoho
-    const contactId = contact?.contact_id
-    if (!contactId) {
-      const err = new Error('Zoho did not return a driver contact id')
-      err.statusCode = 502
-      throw err
-    }
-    const driver = createDriverRecord({
+    const { contact, createdNew } = await ensureDriverContact({
       fullName: input.fullName,
       email: input.email,
-      password: input.password,
-      zohoContactId: contactId
+      contactType: env.DRIVER_ZOHO_CONTACT_TYPE
     })
-    appendAdminAudit({
-      action: 'admin_create_driver',
-      meta: { email: driver.email, zohoContactId: contactId }
-    })
-    res.status(201).json({ message: 'Driver created', driver })
+    contactId = contact.contact_id
+    zohoCreatedThisRequest = createdNew
+    try {
+      const driver = createDriverRecord({
+        fullName: input.fullName,
+        email: input.email,
+        password: input.password,
+        zohoContactId: contactId
+      })
+      appendAdminAudit({
+        action: 'admin_create_driver',
+        meta: { email: driver.email, zohoContactId: contactId, zohoExisted: !zohoCreatedThisRequest }
+      })
+      res.status(201).json({ message: 'Driver created', driver })
+    } catch (error) {
+      if (zohoCreatedThisRequest && contactId) {
+        try {
+          await deleteOrDeactivateZohoContact(contactId)
+        } catch {
+          /* best-effort rollback */
+        }
+      }
+      throw error
+    }
   } catch (error) {
     next(error)
   }

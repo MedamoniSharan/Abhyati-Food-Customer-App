@@ -53,15 +53,42 @@ export async function searchCustomerByEmail(email) {
   })
 }
 
-export async function findCustomerByEmail(email) {
+export async function findContactByEmail(email, contactType) {
   const normalized = String(email || '').trim().toLowerCase()
   if (!normalized) return null
   const organizationId = await getOrganizationId()
   const data = await request('get', '/contacts', {
-    params: { organization_id: organizationId, email: normalized, contact_type: 'customer', per_page: 50 }
+    params: { organization_id: organizationId, email: normalized, contact_type: contactType, per_page: 50 }
   })
   const contacts = Array.isArray(data?.contacts) ? data.contacts : []
-  return contacts.find((contact) => String(contact?.email || '').trim().toLowerCase() === normalized) || null
+  return contacts.find((c) => String(c?.email || '').trim().toLowerCase() === normalized) || null
+}
+
+export async function findCustomerByEmail(email) {
+  return findContactByEmail(email, 'customer')
+}
+
+/**
+ * Ensure a Books contact for a driver (vendor or customer per env). Creates if missing.
+ * @returns {{ contact: object, createdNew: boolean }}
+ */
+export async function ensureDriverContact({ fullName, email, contactType }) {
+  const existing = await findContactByEmail(email, contactType)
+  if (existing?.contact_id) {
+    return { contact: existing, createdNew: false }
+  }
+  const zoho = await createModule('/contacts', {
+    contact_name: fullName || email,
+    contact_type: contactType,
+    email
+  })
+  const contact = zoho?.contact || zoho
+  if (!contact?.contact_id) {
+    const err = new Error('Zoho did not return a driver contact id')
+    err.statusCode = 502
+    throw err
+  }
+  return { contact, createdNew: true }
 }
 
 export async function ensureCustomerContact({ fullName, email, mobile }) {
