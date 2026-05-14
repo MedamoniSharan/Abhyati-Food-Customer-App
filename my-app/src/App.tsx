@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { useToast } from './contexts/ToastContext'
-import { products } from './data/mockData'
 import { AccountScreen } from './screens/AccountScreen'
 import { AuthScreen } from './screens/AuthScreen'
 import { CartScreen } from './screens/CartScreen'
@@ -12,7 +11,7 @@ import type { CartItem, Order, Product, Screen } from './types/app'
 import { createCustomerOrder, downloadOrderProof, fetchZohoItemsPage, getBackendOrders } from './services/backendApi'
 import { fetchAuthMe } from './services/authApi'
 import { checkBackendReachable } from './utils/backendHealth'
-import { clearSignedIn, readAuthToken, readSignedIn, writeSignedIn } from './utils/authSession'
+import { clearSignedIn, readAuthToken, readSessionUser, readSignedIn, writeSignedIn } from './utils/authSession'
 import { matchOrderToProduct } from './utils/orders'
 
 function App() {
@@ -21,25 +20,17 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(readSignedIn)
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [orderHistory, setOrderHistory] = useState<Order[]>([])
-  const [selectedProduct, setSelectedProduct] = useState<Product>(products[0])
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('All Items')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [nextItemsPage, setNextItemsPage] = useState(1)
   const [hasMoreCatalogItems, setHasMoreCatalogItems] = useState(true)
-  const [loadingCatalog, setLoadingCatalog] = useState(true)
+  /** True while restoring session so home can show bootstrap loader before first Zoho fetch. */
+  const [loadingCatalog, setLoadingCatalog] = useState(readSignedIn)
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null)
   const catalogFetchLock = useRef(false)
-  const [addresses] = useState<string[]>([
-    'Office: 2nd Floor, Sector 62, Noida, Uttar Pradesh',
-    'Warehouse: Plot 14, Bhiwandi, Maharashtra',
-  ])
-  const [paymentMethods] = useState<string[]>([
-    'UPI: platepro@icici',
-    'Corporate Card: **** 2811',
-    'Net Banking: HDFC Business Account',
-  ])
 
   useEffect(() => {
     document.body.dataset.toastLayout = isAuthenticated ? 'main' : 'auth'
@@ -108,8 +99,10 @@ function App() {
         const merged = mergeDedupeProducts(prev, products)
         if (merged.length > 0) {
           setSelectedProduct((current) =>
-            merged.some((p) => p.id === current.id) ? current : merged[0],
+            current && merged.some((p) => p.id === current.id) ? current : merged[0],
           )
+        } else {
+          setSelectedProduct(null)
         }
         return merged
       })
@@ -123,39 +116,55 @@ function App() {
     }
   }, [hasMoreCatalogItems, mergeDedupeProducts, nextItemsPage, showToast])
 
+  /** Zoho Books items require a customer JWT. Load every page after sign-in (or session restore). */
   useEffect(() => {
+    if (!isAuthenticated) return
     let cancelled = false
-    ;(async () => {
-      catalogFetchLock.current = true
-      setLoadingCatalog(true)
+    catalogFetchLock.current = true
+    setLoadingCatalog(true)
+    const perPage = 200
+    void (async () => {
       try {
-        const firstPage = await fetchZohoItemsPage(1, 20)
-        if (cancelled) return
-        const merged = mergeDedupeProducts([], firstPage.products)
-        setCatalogProducts(merged)
-        if (merged.length > 0) {
-          setSelectedProduct(merged[0])
+        let page = 1
+        let merged: Product[] = []
+        let hasMore = true
+        while (hasMore && !cancelled) {
+          const { products: pageProducts, hasMore: more } = await fetchZohoItemsPage(page, perPage)
+          if (cancelled) break
+          merged = mergeDedupeProducts(merged, pageProducts)
+          hasMore = more
+          page += 1
+          if (page > 500) break
         }
-        setHasMoreCatalogItems(firstPage.hasMore)
-        setNextItemsPage(2)
+        if (cancelled) return
+        setCatalogProducts(merged)
+        setHasMoreCatalogItems(false)
+        setNextItemsPage(1)
+        if (merged.length > 0) {
+          setSelectedProduct((current) =>
+            current && merged.some((p) => p.id === current.id) ? current : merged[0],
+          )
+        } else {
+          setSelectedProduct(null)
+        }
       } catch {
         if (!cancelled) {
-          showToast('Unable to load backend data. Showing local catalog.', { variant: 'warning' })
-          setCatalogProducts(products)
-          setSelectedProduct(products[0])
+          showToast('Unable to load products. Check your connection and try again.', { variant: 'error' })
+          setCatalogProducts([])
+          setSelectedProduct(null)
           setHasMoreCatalogItems(false)
         }
       } finally {
-        if (!cancelled) {
-          catalogFetchLock.current = false
-          setLoadingCatalog(false)
-        }
+        catalogFetchLock.current = false
+        if (!cancelled) setLoadingCatalog(false)
       }
     })()
     return () => {
       cancelled = true
+      catalogFetchLock.current = false
+      setLoadingCatalog(false)
     }
-  }, [mergeDedupeProducts, showToast])
+  }, [isAuthenticated, mergeDedupeProducts, showToast])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -188,6 +197,27 @@ function App() {
       return matchCategory && matchQuery
     })
   }, [catalogProducts, searchQuery, selectedCategory])
+
+  const catalogCategories = useMemo(() => {
+    const names = new Set<string>()
+    for (const p of catalogProducts) {
+      const c = p.category?.trim()
+      if (c) names.add(c)
+    }
+    return ['All Items', ...Array.from(names).sort((a, b) => a.localeCompare(b))]
+  }, [catalogProducts])
+
+  useEffect(() => {
+    if (!catalogCategories.includes(selectedCategory)) {
+      setSelectedCategory('All Items')
+    }
+  }, [catalogCategories, selectedCategory])
+
+  useEffect(() => {
+    if (screen === 'product' && !selectedProduct) {
+      setScreen('home')
+    }
+  }, [screen, selectedProduct])
 
   function addToCart(product: Product, quantity = 1) {
     const cap = product.availableStock
@@ -289,6 +319,7 @@ function App() {
     if (screen === 'home') {
       return (
         <HomeScreen
+          categories={catalogCategories}
           products={visibleProducts}
           category={selectedCategory}
           query={searchQuery}
@@ -310,6 +341,7 @@ function App() {
     }
 
     if (screen === 'product') {
+      if (!selectedProduct) return null
       return (
         <ProductDetailsScreen
           product={selectedProduct}
@@ -363,20 +395,19 @@ function App() {
 
     return (
       <AccountScreen
+        user={readSessionUser()}
         onNavigateOrders={() => setScreen('orders')}
-        onOpenAddresses={() => {
-          showToast('Loaded saved delivery addresses', { variant: 'success' })
-          return addresses
-        }}
-        onOpenPayments={() => {
-          showToast('Loaded saved payment methods', { variant: 'success' })
-          return paymentMethods
-        }}
+        onOpenAddresses={() => []}
+        onOpenPayments={() => []}
         onLogout={() => {
           clearSignedIn()
           setIsAuthenticated(false)
           setCartItems([])
           setOrderHistory([])
+          setCatalogProducts([])
+          setNextItemsPage(1)
+          setHasMoreCatalogItems(true)
+          setSelectedProduct(null)
           setSearchQuery('')
           setSelectedCategory('All Items')
           setScreen('home')
@@ -390,7 +421,7 @@ function App() {
     <div className="app-shell">
       {backendReachable === false ? (
         <div className="api-offline-banner" role="status">
-          Cannot reach the server. Showing offline data where available. Check your connection or try again later.
+          Cannot reach the server. Check your connection or try again later.
         </div>
       ) : null}
       {!isAuthenticated ? (

@@ -8,8 +8,17 @@ import { clearSignedIn, readSessionUser, readSignedIn, writeSignedIn } from './u
 
 function App() {
   const { showToast } = useToast()
-  const [isAuthenticated, setIsAuthenticated] = useState(readSignedIn)
-  const [sessionUser, setSessionUser] = useState<AuthUser | null>(() => (readSignedIn() ? readSessionUser() : null))
+  const [isAuthenticated, setIsAuthenticated] = useState(() => readSignedIn() && Boolean(readSessionUser()))
+  const [sessionUser, setSessionUser] = useState<AuthUser | null>(() => readSessionUser())
+
+  useEffect(() => {
+    if (readSignedIn() && !readSessionUser()) {
+      clearSignedIn()
+      setIsAuthenticated(false)
+      setSessionUser(null)
+    }
+  }, [])
+
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -33,7 +42,7 @@ function App() {
           Cannot reach the server. Check your connection or try again later.
         </div>
       ) : null}
-      {!isAuthenticated ? (
+      {!isAuthenticated || !sessionUser ? (
         <DriverAuthScreen
           onAuthenticated={({ message, user, token }) => {
             writeSignedIn(user, token)
@@ -44,7 +53,7 @@ function App() {
         />
       ) : (
         <DeliveryDriverApp
-          user={sessionUser ?? { id: 'local', fullName: 'Driver', email: '' }}
+          user={sessionUser}
           onLogout={() => {
             clearSignedIn()
             setIsAuthenticated(false)

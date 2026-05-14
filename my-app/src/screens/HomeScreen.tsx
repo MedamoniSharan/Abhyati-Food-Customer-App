@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { categories } from '../data/mockData'
 import type { Product } from '../types/app'
 import { CatalogLoader } from '../components/CatalogLoader'
 import { ProductCard } from '../components/ProductCard'
 import { ProductGridSkeleton } from '../components/ProductGridSkeleton'
 
 type Props = {
+  categories: string[]
   products: Product[]
   category: string
   query: string
@@ -25,6 +25,7 @@ type Props = {
 }
 
 export function HomeScreen({
+  categories,
   products,
   category,
   query,
@@ -72,7 +73,7 @@ export function HomeScreen({
           </button>
           <div className="hero-location">
             <p>Delivery location</p>
-            <h1>Canggu, Kuta Utara, Bali</h1>
+            <h1>Set at checkout</h1>
           </div>
           <div className="header-actions">
             <button
@@ -184,18 +185,9 @@ export function HomeScreen({
         {!catalogBootstrapping && products.length === 0 ? (
           <div className="empty-state">
             <h3>No products found</h3>
-            <p>Try another keyword or category filter.</p>
+            <p>Try another keyword or category filter, or check back when new stock is listed.</p>
           </div>
         ) : null}
-
-        <section className="promo-card">
-          <span className="promo-label">New Arrival</span>
-          <h3>Compostable Cutlery Sets</h3>
-          <p>Complete your eco-friendly setup with our new line of durable forks & spoons.</p>
-          <button type="button" className="btn btn-light" onClick={() => onNotify('Cutlery listing launching soon')}>
-            Shop Now
-          </button>
-        </section>
       </main>
     </>
   )

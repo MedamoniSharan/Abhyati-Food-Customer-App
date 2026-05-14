@@ -4,5 +4,5 @@ export function matchOrderToProduct(order: Order, products: Product[]): Product 
   const match = products.find((product) =>
     order.items.toLowerCase().includes(product.name.split(' ')[0].toLowerCase()),
   )
-  return match ?? products[0] ?? null
+  return match ?? null
 }

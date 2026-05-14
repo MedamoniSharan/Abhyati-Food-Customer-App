@@ -1,7 +1,7 @@
 import type { Order, Product } from '../types/app'
 import { getApiBaseCandidates, logApiCandidatesOnce } from '../config/api'
-import { orders as mockOrders, products as mockProducts } from '../data/mockData'
 import { readAuthToken } from '../utils/authSession'
+import { FALLBACK_PRODUCT_IMAGE } from '../utils/productImage'
 import { zohoAvailableStockQuantity } from '../utils/productDetailFromZoho'
 
 const API_BASE_URL_CANDIDATES = getApiBaseCandidates()
@@ -30,15 +30,6 @@ type ZohoItem = {
   image_name?: string
 }
 
-function zohoItemHasImage(item: ZohoItem): boolean {
-  const docId = item.image_document_id?.trim()
-  if (docId) return true
-  if (item.has_attachment === true) return true
-  const imageName = item.image_name?.trim()
-  if (imageName) return true
-  return false
-}
-
 type ZohoSalesOrder = {
   id?: string
   invoiceId?: string
@@ -65,20 +56,23 @@ function normalizePrice(value: unknown, fallback: number) {
   return fallback
 }
 
+function zohoItemCategory(item: ZohoItem): string {
+  const raw = (item as Record<string, unknown>).category_name
+  if (typeof raw === 'string' && raw.trim()) return raw.trim()
+  return 'Catalog'
+}
+
 function mapZohoItemToProduct(item: ZohoItem, index: number): Product {
-  const fallback = mockProducts[index % mockProducts.length]
   const itemId = item.item_id?.trim()
   const avail = zohoAvailableStockQuantity(item as unknown as Record<string, unknown>)
   return {
     id: itemId ?? `zoho-${index}`,
     zohoItemId: itemId,
-    name: item.name?.trim() || fallback.name,
-    subtitle: item.description?.trim() || fallback.subtitle,
-    priceInr: normalizePrice(item.rate ?? item.purchase_rate, fallback.priceInr),
-    oldPriceInr: fallback.oldPriceInr,
-    image: fallback.image,
-    badge: fallback.badge,
-    category: fallback.category,
+    name: item.name?.trim() || 'Item',
+    subtitle: item.description?.trim() || '',
+    priceInr: normalizePrice(item.rate ?? item.purchase_rate, 0),
+    image: FALLBACK_PRODUCT_IMAGE,
+    category: zohoItemCategory(item),
     ...(avail != null ? { availableStock: avail } : {}),
   }
 }
@@ -91,7 +85,7 @@ function mapStatus(rawStatus?: string): Order['status'] {
 }
 
 function mapZohoSalesOrderToOrder(order: ZohoSalesOrder, index: number): Order {
-  const fallback = mockOrders[index % mockOrders.length]
+  const id = String(order.id || order.invoiceId || order.invoiceNumber || `order-${index}`)
   const itemsLabel =
     order.line_items
       ?.slice(0, 3)
@@ -99,20 +93,20 @@ function mapZohoSalesOrderToOrder(order: ZohoSalesOrder, index: number): Order {
         const qty = line.quantity ? `${line.quantity}x` : ''
         return `${qty} ${line.name || 'Item'}`.trim()
       })
-      .join(', ') || fallback.items
+      .join(', ') || 'Items'
 
   return {
-    id: order.id || fallback.id,
-    invoiceId: order.invoiceId || order.id || fallback.id,
-    invoiceNumber: order.invoiceNumber || order.id || fallback.id,
-    date: order.date || fallback.date,
+    id,
+    invoiceId: order.invoiceId || order.id || id,
+    invoiceNumber: order.invoiceNumber || order.id || id,
+    date: order.date || '',
     status: mapStatus(order.status),
     items: order.items || itemsLabel,
-    amountInr: normalizePrice(order.amountInr ?? order.total, fallback.amountInr),
-    image: fallback.image,
+    amountInr: normalizePrice(order.amountInr ?? order.total, 0),
+    image: FALLBACK_PRODUCT_IMAGE,
     deliveredAt: order.deliveredAt || null,
     proofAvailable: Boolean(order.proofAvailable),
-    proofMeta: order.proofMeta || null
+    proofMeta: order.proofMeta || null,
   }
 }
 
@@ -135,7 +129,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       const response = await fetch(url, {
         method: options.method || 'GET',
         body: options.body,
-        headers
+        headers,
       })
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`)
@@ -161,30 +155,16 @@ export type ZohoItemsPageResult = {
 }
 
 /**
- * Fetch one page of Zoho items (image-only). Caller appends results and calls again with page+1 while hasMore.
+ * Fetch one page of Zoho Books items. Caller appends results and calls again with page+1 while hasMore.
  */
 export async function fetchZohoItemsPage(page: number, perPage = DEFAULT_ITEMS_PER_PAGE): Promise<ZohoItemsPageResult> {
-  try {
-    const qs = new URLSearchParams({ page: String(page), per_page: String(perPage) })
-    const response = await request<ZohoListResponse<ZohoItem>>(`/api/customer/items?${qs.toString()}`)
-    const items = (response.items as ZohoItem[] | undefined) || []
-    const withImages = items.filter(zohoItemHasImage)
-    const hasMore = Boolean(response.page_context?.has_more_page)
-    const baseIndex = (page - 1) * perPage
-
-    if (items.length === 0 && page === 1) {
-      return { products: mockProducts, hasMore: false }
-    }
-
-    if (withImages.length === 0) {
-      return { products: [], hasMore }
-    }
-
-    const products = withImages.map((item, i) => mapZohoItemToProduct(item, baseIndex + i))
-    return { products, hasMore }
-  } catch {
-    return page === 1 ? { products: mockProducts, hasMore: false } : { products: [], hasMore: false }
-  }
+  const qs = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+  const response = await request<ZohoListResponse<ZohoItem>>(`/api/customer/items?${qs.toString()}`)
+  const items = (response.items as ZohoItem[] | undefined) || []
+  const hasMore = Boolean(response.page_context?.has_more_page)
+  const baseIndex = (page - 1) * perPage
+  const products = items.map((item, i) => mapZohoItemToProduct(item, baseIndex + i))
+  return { products, hasMore }
 }
 
 /** @deprecated Prefer fetchZohoItemsPage with scroll pagination */
@@ -211,9 +191,7 @@ export async function getBackendOrders(): Promise<Order[]> {
     const salesOrders = Array.isArray(response.orders) ? response.orders : []
     return salesOrders.map((row, i) => mapZohoSalesOrderToOrder(row, i))
   } catch {
-    // Signed-in users should see an empty list on failure, not demo orders.
-    if (readAuthToken()) return []
-    return mockOrders
+    return []
   }
 }
 
@@ -229,7 +207,7 @@ export async function createCustomerOrder(lineItems: CheckoutLineInput[]): Promi
   const data = await request<{ order?: ZohoSalesOrder }>('/api/customer/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ line_items: lineItems })
+    body: JSON.stringify({ line_items: lineItems }),
   })
   const raw = data.order
   if (raw && typeof raw === 'object') {

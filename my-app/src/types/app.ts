@@ -11,7 +11,8 @@ export type Product = {
   oldPriceInr?: number
   image: string
   badge?: { label: string; tone: 'green' | 'red' }
-  category: 'Eco-Friendly' | 'Party Packs' | 'Bamboo' | 'Heavy Duty' | 'Premium'
+  /** From Zoho (e.g. category name) or a generic label for filtering. */
+  category: string
   /** Zoho available units; when set, cart / quantity must not exceed this. */
   availableStock?: number
 }

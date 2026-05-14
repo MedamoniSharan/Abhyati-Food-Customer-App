@@ -1,13 +1,15 @@
 import { useState } from 'react'
+import type { AuthUser } from '../services/authApi'
 
 type Props = {
+  user: AuthUser | null
   onNavigateOrders: () => void
   onOpenAddresses: () => string[]
   onOpenPayments: () => string[]
   onLogout: () => void
 }
 
-export function AccountScreen({ onNavigateOrders, onOpenAddresses, onOpenPayments, onLogout }: Props) {
+export function AccountScreen({ user, onNavigateOrders, onOpenAddresses, onOpenPayments, onLogout }: Props) {
   const [addresses, setAddresses] = useState<string[]>([])
   const [payments, setPayments] = useState<string[]>([])
   const [openSection, setOpenSection] = useState<'none' | 'addresses' | 'payments'>('none')
@@ -36,8 +38,8 @@ export function AccountScreen({ onNavigateOrders, onOpenAddresses, onOpenPayment
         <section className="account-card">
           <img src="/app-logo.png" alt="Abhyati food logo" className="avatar avatar-logo" />
           <div>
-            <h3>Mahesh Sharan</h3>
-            <p>Procurement Manager, Abhyati food Buyer</p>
+            <h3>{user?.fullName?.trim() || 'Your account'}</h3>
+            <p>{user?.email?.trim() || 'Signed in'}</p>
           </div>
         </section>
 
@@ -59,6 +61,7 @@ export function AccountScreen({ onNavigateOrders, onOpenAddresses, onOpenPayment
         {openSection === 'addresses' ? (
           <section className="info-list-card">
             <h4>Saved Addresses</h4>
+            {addresses.length === 0 ? <p>No saved addresses yet.</p> : null}
             {addresses.map((address) => (
               <p key={address}>{address}</p>
             ))}
@@ -68,6 +71,7 @@ export function AccountScreen({ onNavigateOrders, onOpenAddresses, onOpenPayment
         {openSection === 'payments' ? (
           <section className="info-list-card">
             <h4>Payment Methods</h4>
+            {payments.length === 0 ? <p>No saved payment methods yet.</p> : null}
             {payments.map((method) => (
               <p key={method}>{method}</p>
             ))}
