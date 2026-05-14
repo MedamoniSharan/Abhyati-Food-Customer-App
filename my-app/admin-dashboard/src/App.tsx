@@ -275,6 +275,8 @@ export default function App() {
   const [customersPage, setCustomersPage] = useState(1)
   const [selectedCustomerRowKeys, setSelectedCustomerRowKeys] = useState<Record<string, boolean>>({})
   const [zohoCustomersLoading, setZohoCustomersLoading] = useState(false)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerSourceFilter, setCustomerSourceFilter] = useState<'' | 'app' | 'zoho'>('')
   const [driversSortAsc, setDriversSortAsc] = useState(true)
   const [driversPage, setDriversPage] = useState(1)
   const [selectedDriverEmails, setSelectedDriverEmails] = useState<Record<string, boolean>>({})
@@ -446,12 +448,26 @@ export default function App() {
     }))
     return [...appRows, ...zohoRows]
   }, [customers, zohoContacts])
+  const filteredCustomers = useMemo(() => {
+    let rows = unifiedCustomers
+    if (customerSourceFilter) {
+      rows = rows.filter((c) => c.source === customerSourceFilter)
+    }
+    if (customerSearch.trim()) {
+      const q = customerSearch.trim().toLowerCase()
+      rows = rows.filter(
+        (c) => c.fullName.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.mobile.toLowerCase().includes(q)
+      )
+    }
+    return rows
+  }, [unifiedCustomers, customerSourceFilter, customerSearch])
+
   const sortedCustomers = useMemo(
     () =>
-      [...unifiedCustomers].sort((a, b) =>
+      [...filteredCustomers].sort((a, b) =>
         customersSortAsc ? a.fullName.localeCompare(b.fullName) : b.fullName.localeCompare(a.fullName)
       ),
-    [unifiedCustomers, customersSortAsc]
+    [filteredCustomers, customersSortAsc]
   )
   const customersPaged = useMemo(
     () => paginateRows(sortedCustomers, customersPage, TABLE_PAGE_SIZE),
@@ -717,7 +733,9 @@ export default function App() {
       </aside>
       <div className="admin-main">
         <header className="admin-topbar">
-          <strong style={{ textTransform: 'capitalize' }}>{page}</strong>
+          <strong>
+            {{ dashboard: 'Dashboard', products: 'Products', customers: 'Customers', drivers: 'Deliverers', deliveries: 'Orders', settings: 'Settings' }[page]}
+          </strong>
           <span style={{ color: 'var(--admin-muted)', fontSize: '0.875rem' }}>Zoho Books connected</span>
         </header>
         <main className="admin-content">
@@ -873,21 +891,49 @@ export default function App() {
 
           {page === 'customers' ? (
             <>
-              <h2 style={{ marginTop: 0 }}>Customers</h2>
-              <p style={{ color: 'var(--admin-muted)' }}>App + Zoho customers in one list.</p>
-              <div className="admin-form-row" style={{ justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  className="admin-btn admin-btn--ghost"
-                  disabled={selectedAppCustomers.length === 0}
-                  onClick={() => void handleDeleteSelectedCustomers()}
-                >
-                  Delete selected ({selectedAppCustomers.length})
-                </button>
-                <button type="button" className="admin-btn admin-btn-inline" onClick={() => setShowAddCustomerModal(true)}>
-                  Add
-                </button>
+              <div className="admin-products-header">
+                <h2 style={{ marginTop: 0 }}>Customers</h2>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn--ghost admin-btn-inline"
+                    disabled={selectedAppCustomers.length === 0}
+                    onClick={() => void handleDeleteSelectedCustomers()}
+                  >
+                    Delete selected ({selectedAppCustomers.length})
+                  </button>
+                  <button type="button" className="admin-btn admin-btn-inline" onClick={() => setShowAddCustomerModal(true)}>
+                    Add Customer
+                  </button>
+                </div>
               </div>
+              <section className="admin-card" style={{ marginBottom: 20 }}>
+                <div className="admin-toolbar">
+                  <div className="admin-toolbar__search">
+                    <span className="admin-toolbar__search-icon" aria-hidden>⌕</span>
+                    <input
+                      type="search"
+                      className="admin-toolbar__search-input"
+                      placeholder="Search by name, email, or mobile…"
+                      value={customerSearch}
+                      onChange={(e) => { setCustomerSearch(e.target.value); setCustomersPage(1) }}
+                      aria-label="Search customers"
+                    />
+                  </div>
+                  <select
+                    className="admin-select"
+                    value={customerSourceFilter}
+                    onChange={(e) => { setCustomerSourceFilter(e.target.value as '' | 'app' | 'zoho'); setCustomersPage(1) }}
+                    aria-label="Filter by source"
+                  >
+                    <option value="">All sources</option>
+                    <option value="app">App only</option>
+                    <option value="zoho">Zoho only</option>
+                  </select>
+                </div>
+                <div className="admin-toolbar-meta">
+                  <span className="admin-muted">{filteredCustomers.length} customer{filteredCustomers.length !== 1 ? 's' : ''}</span>
+                </div>
               {customersLoading || zohoCustomersLoading ? <div className="admin-section-loader">Loading customers…</div> : null}
               <div className="admin-table-wrap">
                 <table className="admin-table">
@@ -999,27 +1045,28 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
-              <div className="admin-table-pagination">
+              <nav className="admin-pagination" aria-label="Customer pages">
                 <button
                   className="admin-btn admin-btn--ghost"
                   type="button"
-                  disabled={customersLoading || zohoCustomersLoading}
+                  disabled={customersLoading || zohoCustomersLoading || customersPaged.safePage <= 1}
                   onClick={() => setCustomersPage((p) => Math.max(1, p - 1))}
                 >
-                  Prev
+                  Previous
                 </button>
-                <span>
-                  Page {customersPaged.safePage} / {customersPaged.totalPages}
+                <span className="admin-pagination__info">
+                  Page <strong>{customersPaged.safePage}</strong> of {customersPaged.totalPages}
                 </span>
                 <button
                   className="admin-btn admin-btn--ghost"
                   type="button"
-                  disabled={customersLoading || zohoCustomersLoading}
+                  disabled={customersLoading || zohoCustomersLoading || customersPaged.safePage >= customersPaged.totalPages}
                   onClick={() => setCustomersPage((p) => Math.min(customersPaged.totalPages, p + 1))}
                 >
                   Next
                 </button>
-              </div>
+              </nav>
+              </section>
             </>
           ) : null}
 

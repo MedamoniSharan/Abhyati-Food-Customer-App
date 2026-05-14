@@ -28,16 +28,22 @@ function readItemStock(item: ZohoItemRow | null | undefined): number | null {
     const n = Number(item[key])
     if (Number.isFinite(n)) return n
   }
-  return null
-}
-
-function detectStockKey(item: ZohoItemRow | null | undefined): (typeof STOCK_KEYS)[number] {
-  if (!item) return 'stock_on_hand'
-  for (const key of STOCK_KEYS) {
-    const raw = item[key]
-    if (raw !== undefined && raw !== null && raw !== '') return key
+  const locs = item.locations
+  if (Array.isArray(locs)) {
+    let fallback: number | null = null
+    for (const loc of locs) {
+      if (!loc || typeof loc !== 'object') continue
+      const rec = loc as Record<string, unknown>
+      for (const field of ['location_actual_available_stock', 'location_available_stock', 'location_stock_on_hand'] as const) {
+        const n = Number(rec[field])
+        if (!Number.isFinite(n)) continue
+        if (rec.is_primary === true || rec.is_primary === 'true') return n
+        if (fallback === null) fallback = n
+      }
+    }
+    if (fallback !== null) return fallback
   }
-  return 'stock_on_hand'
+  return null
 }
 
 function ItemThumb({ itemId, label, cacheBust }: { itemId: string; label: string; cacheBust?: string }) {
@@ -108,6 +114,7 @@ export function ProductsSection() {
   const [selectedProductIds, setSelectedProductIds] = useState<Record<string, boolean>>({})
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [creatingProduct, setCreatingProduct] = useState(false)
+  const [savingProduct, setSavingProduct] = useState(false)
 
   useEffect(() => {
     setEditProductImage(null)
@@ -198,7 +205,8 @@ export function ProductsSection() {
   )
   const selectedProductsCount = selectedProducts.length
 
-  async function refreshAfterMutation() {
+  async function refreshAfterMutation(delayMs = 0) {
+    if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs))
     await loadCatalog()
   }
 
@@ -693,24 +701,24 @@ export function ProductsSection() {
               />
             </label>
             <div className="admin-modal__footer">
-              <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setEditingItem(null)}>
+              <button type="button" className="admin-btn admin-btn--ghost" disabled={savingProduct} onClick={() => setEditingItem(null)}>
                 Cancel
               </button>
               <button
                 type="button"
                 className="admin-btn admin-btn-inline"
+                disabled={savingProduct}
                 onClick={async () => {
                   const id = String(editingItem.item_id ?? '')
                   if (!id) return
+                  setSavingProduct(true)
                   try {
-                    await adminFetch(`/api/admin/items/${encodeURIComponent(id)}`, {
+                    const resData = await adminFetch<{ item?: ZohoItemRow }>(`/api/admin/items/${encodeURIComponent(id)}`, {
                       method: 'PUT',
                       body: JSON.stringify({
                         name: editingItem.name,
                         rate: editingItem.rate,
-                        ...(editingStock.trim()
-                          ? { [detectStockKey(editingItem)]: Number(editingStock) }
-                          : {}),
+                        ...(editingStock.trim() ? { stock_on_hand: Number(editingStock) } : {}),
                         sku: editingItem.sku || undefined,
                         description: editingItem.description || undefined
                       })
@@ -728,14 +736,21 @@ export function ProductsSection() {
                         return
                       }
                     }
+                    toast('Product saved successfully')
+                    const merged = resData?.item
+                    if (merged && typeof merged === 'object') {
+                      setItems((prev) => prev.map((it) => (String(it.item_id) === id ? { ...it, ...merged } : it)))
+                    }
                     setEditingItem(null)
-                    await refreshAfterMutation()
+                    void refreshAfterMutation()
                   } catch (e) {
                     toast(e instanceof Error ? e.message : 'Failed', 'error')
+                  } finally {
+                    setSavingProduct(false)
                   }
                 }}
               >
-                Save to Zoho
+                {savingProduct ? 'Saving…' : 'Save to Zoho'}
               </button>
             </div>
           </div>

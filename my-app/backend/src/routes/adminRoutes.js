@@ -60,6 +60,105 @@ function handleItemImageUpload(req, res, next) {
   })
 }
 
+/** Zoho list/detail may expose quantity on the item or under `locations[]`. */
+const ZOHO_STOCK_BODY_KEYS = ['stock_on_hand', 'available_stock', 'actual_available_stock', 'opening_stock']
+
+function readZohoItemQuantity(item) {
+  if (!item || typeof item !== 'object') return null
+  for (const k of ZOHO_STOCK_BODY_KEYS) {
+    if (!(k in item)) continue
+    const raw = item[k]
+    if (raw === '' || raw == null) continue
+    const n = Number(raw)
+    if (Number.isFinite(n)) return n
+  }
+  const locs = item.locations
+  if (!Array.isArray(locs)) return null
+  let fallback = null
+  for (const loc of locs) {
+    if (!loc || typeof loc !== 'object') continue
+    for (const field of ['location_actual_available_stock', 'location_available_stock', 'location_stock_on_hand']) {
+      const raw = loc[field]
+      if (raw === '' || raw == null) continue
+      const n = Number(raw)
+      if (!Number.isFinite(n)) continue
+      if (loc.is_primary === true || loc.is_primary === 'true') return n
+      if (fallback === null) fallback = n
+    }
+  }
+  return fallback
+}
+
+function extractStockTargetFromBody(body) {
+  if (!body || typeof body !== 'object') return null
+  for (const k of ZOHO_STOCK_BODY_KEYS) {
+    if (!(k in body)) continue
+    const raw = body[k]
+    if (raw === '' || raw == null) continue
+    const n = Number(raw)
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
+function stripStockFieldsFromBody(body) {
+  const clean = { ...body }
+  for (const k of ZOHO_STOCK_BODY_KEYS) delete clean[k]
+  return clean
+}
+
+/**
+ * Zoho often ignores plain `stock_on_hand` on item PUT when warehousing/locations are used.
+ * Prefer inventory adjustment (needs ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID); else PATCH locations.
+ */
+async function applyZohoItemStock(id, existingItem, targetQty) {
+  const accountId = env.ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID
+  const current = readZohoItemQuantity(existingItem)
+
+  if (accountId && current !== null) {
+    const delta = targetQty - current
+    if (delta === 0) return
+    const today = new Date().toISOString().slice(0, 10)
+    await createModule('/inventoryadjustments', {
+      date: today,
+      reason: `Admin — stock update (item ${id})`,
+      adjustment_type: 'quantity',
+      line_items: [
+        {
+          item_id: String(id),
+          quantity_adjusted: String(delta),
+          adjustment_account_id: accountId
+        }
+      ]
+    })
+    return
+  }
+
+  const locs = existingItem?.locations
+  if (Array.isArray(locs) && locs.length > 0) {
+    const primaryIdx = locs.findIndex((l) => l && (l.is_primary === true || l.is_primary === 'true'))
+    const idx = primaryIdx >= 0 ? primaryIdx : 0
+    const newLocs = locs.map((loc, j) => {
+      if (!loc || typeof loc !== 'object') return { location_id: String(loc.location_id) }
+      const base = {
+        location_id: String(loc.location_id),
+        ...(loc.location_name != null && loc.location_name !== '' ? { location_name: loc.location_name } : {}),
+        ...(loc.status != null && loc.status !== '' ? { status: loc.status } : {}),
+        ...(loc.is_primary != null ? { is_primary: loc.is_primary } : {})
+      }
+      if (j === idx) {
+        return { ...base, location_stock_on_hand: String(targetQty) }
+      }
+      const keep = loc.location_stock_on_hand
+      return keep != null && keep !== '' ? { ...base, location_stock_on_hand: String(keep) } : base
+    })
+    await updateModule('/items', id, { locations: newLocs })
+    return
+  }
+
+  await updateModule('/items', id, { stock_on_hand: targetQty })
+}
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1)
@@ -621,9 +720,34 @@ adminRoutes.put('/items/:id', async (req, res, next) => {
   try {
     const id = z.string().min(1).parse(req.params.id)
     const body = z.record(z.unknown()).parse(req.body)
-    const data = await updateModule('/items', id, body)
+    const targetStock = extractStockTargetFromBody(body)
+    const cleanBody = stripStockFieldsFromBody(body)
+
+    let existingItem = null
+    if (targetStock != null) {
+      try {
+        const existing = await getModuleById('/items', id)
+        existingItem = existing?.item ?? existing
+      } catch {
+        existingItem = null
+      }
+    }
+
+    const data = await updateModule('/items', id, cleanBody)
     appendAdminAudit({ action: 'admin_update_item', meta: { id } })
-    res.json(data)
+
+    if (targetStock != null && existingItem) {
+      await applyZohoItemStock(id, existingItem, targetStock)
+    } else if (targetStock != null) {
+      await updateModule('/items', id, { stock_on_hand: targetStock })
+    }
+
+    try {
+      const fresh = await getModuleById('/items', id)
+      res.json(fresh)
+    } catch {
+      res.json(data)
+    }
   } catch (error) {
     next(error)
   }
