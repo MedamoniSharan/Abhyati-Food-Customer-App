@@ -37,6 +37,22 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase()
 }
 
+/** Zoho list payloads sometimes omit `customer_email`; `customer_id` is reliable after checkout. */
+function invoiceBelongsToAppCustomer(invoice, customerEmail, zohoCustomerId) {
+  const email = normalizeEmail(customerEmail)
+  const invEmail = normalizeEmail(invoice?.customer_email)
+  if (invEmail && invEmail === email) return true
+  const zid = String(zohoCustomerId || '').trim()
+  if (zid && String(invoice?.customer_id || '').trim() === zid) return true
+  return false
+}
+
+function compareOrderDateDesc(a, b) {
+  const ta = Date.parse(String(a?.date || '')) || 0
+  const tb = Date.parse(String(b?.date || '')) || 0
+  return tb - ta
+}
+
 function buildOrderItemsLabel(lineItems) {
   if (!Array.isArray(lineItems) || lineItems.length === 0) return 'Items'
   return lineItems
@@ -136,10 +152,14 @@ customerRoutes.post('/orders', async (req, res, next) => {
       createInvoice(invoicePayload)
     ])
 
+    const invoice = invoiceData?.invoice || invoiceData
+    const order = invoice ? mapInvoiceToOrder(invoice, null) : null
+
     res.status(201).json({
       message: 'Order created',
       salesorder: salesOrderData?.salesorder || salesOrderData,
-      invoice: invoiceData?.invoice || invoiceData
+      invoice,
+      ...(order ? { order } : {})
     })
   } catch (error) {
     next(error)
@@ -150,11 +170,18 @@ customerRoutes.get('/orders', async (req, res, next) => {
   try {
     const query = listQuerySchema.parse(req.query)
     const email = normalizeEmail(req.customer.email)
+    const contact = await ensureCustomerContact({
+      fullName: req.customer.fullName,
+      email: req.customer.email
+    })
+    const zohoCustomerId = String(contact?.contact_id || '')
     const data = await listModule('/invoices', { per_page: 200, ...query })
     const rows = Array.isArray(data?.invoices) ? data.invoices : []
-    const invoices = rows.filter((invoice) => normalizeEmail(invoice?.customer_email) === email)
+    const invoices = rows.filter((invoice) => invoiceBelongsToAppCustomer(invoice, email, zohoCustomerId))
     const assignmentsByInvoice = new Map(listAssignments().map((row) => [String(row.invoiceId), row]))
-    const orders = invoices.map((invoice) => mapInvoiceToOrder(invoice, assignmentsByInvoice.get(String(invoice.invoice_id))))
+    const orders = invoices
+      .map((invoice) => mapInvoiceToOrder(invoice, assignmentsByInvoice.get(String(invoice.invoice_id))))
+      .sort(compareOrderDateDesc)
     res.json({ orders })
   } catch (error) {
     next(error)
@@ -165,9 +192,14 @@ customerRoutes.get('/invoices', async (req, res, next) => {
   try {
     const query = listQuerySchema.parse(req.query)
     const email = normalizeEmail(req.customer.email)
+    const contact = await ensureCustomerContact({
+      fullName: req.customer.fullName,
+      email: req.customer.email
+    })
+    const zohoCustomerId = String(contact?.contact_id || '')
     const data = await listModule('/invoices', { per_page: 200, ...query })
-    const invoices = (Array.isArray(data?.invoices) ? data.invoices : []).filter(
-      (invoice) => normalizeEmail(invoice?.customer_email) === email
+    const invoices = (Array.isArray(data?.invoices) ? data.invoices : []).filter((invoice) =>
+      invoiceBelongsToAppCustomer(invoice, email, zohoCustomerId)
     )
     res.json({ ...data, invoices })
   } catch (error) {
@@ -180,8 +212,12 @@ customerRoutes.get('/invoices/:id', async (req, res, next) => {
     const { id } = idParamSchema.parse(req.params)
     const data = await getModuleById('/invoices', id)
     const invoice = data?.invoice || data
-    const invoiceEmail = normalizeEmail(invoice?.customer_email)
-    if (invoiceEmail && invoiceEmail !== normalizeEmail(req.customer.email)) {
+    const contact = await ensureCustomerContact({
+      fullName: req.customer.fullName,
+      email: req.customer.email
+    })
+    const zohoCustomerId = String(contact?.contact_id || '')
+    if (!invoiceBelongsToAppCustomer(invoice, req.customer.email, zohoCustomerId)) {
       const err = new Error('Invoice not found')
       err.statusCode = 404
       throw err
@@ -197,8 +233,12 @@ customerRoutes.get('/orders/:id/proof', async (req, res, next) => {
     const { id } = idParamSchema.parse(req.params)
     const data = await getModuleById('/invoices', id)
     const invoice = data?.invoice || data
-    const invoiceEmail = normalizeEmail(invoice?.customer_email)
-    if (invoiceEmail && invoiceEmail !== normalizeEmail(req.customer.email)) {
+    const contact = await ensureCustomerContact({
+      fullName: req.customer.fullName,
+      email: req.customer.email
+    })
+    const zohoCustomerId = String(contact?.contact_id || '')
+    if (!invoiceBelongsToAppCustomer(invoice, req.customer.email, zohoCustomerId)) {
       const err = new Error('Order proof not found')
       err.statusCode = 404
       throw err

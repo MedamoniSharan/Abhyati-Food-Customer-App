@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { useToast } from './contexts/ToastContext'
-import { orders, products } from './data/mockData'
+import { products } from './data/mockData'
 import { AccountScreen } from './screens/AccountScreen'
 import { AuthScreen } from './screens/AuthScreen'
 import { CartScreen } from './screens/CartScreen'
@@ -20,7 +20,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>('home')
   const [isAuthenticated, setIsAuthenticated] = useState(readSignedIn)
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
-  const [orderHistory, setOrderHistory] = useState<Order[]>(orders)
+  const [orderHistory, setOrderHistory] = useState<Order[]>([])
   const [selectedProduct, setSelectedProduct] = useState<Product>(products[0])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('All Items')
@@ -80,6 +80,11 @@ function App() {
     }
   }, [showToast])
 
+  const refreshOrderHistory = useCallback(async () => {
+    if (!readAuthToken()) return
+    setOrderHistory(await getBackendOrders())
+  }, [])
+
   const mergeDedupeProducts = useCallback((existing: Product[], incoming: Product[]) => {
     const seen = new Set(existing.map((p) => p.id))
     const out = [...existing]
@@ -124,7 +129,7 @@ function App() {
       catalogFetchLock.current = true
       setLoadingCatalog(true)
       try {
-        const [firstPage, backendOrders] = await Promise.all([fetchZohoItemsPage(1, 20), getBackendOrders()])
+        const firstPage = await fetchZohoItemsPage(1, 20)
         if (cancelled) return
         const merged = mergeDedupeProducts([], firstPage.products)
         setCatalogProducts(merged)
@@ -133,7 +138,6 @@ function App() {
         }
         setHasMoreCatalogItems(firstPage.hasMore)
         setNextItemsPage(2)
-        setOrderHistory(backendOrders)
       } catch {
         if (!cancelled) {
           showToast('Unable to load backend data. Showing local catalog.', { variant: 'warning' })
@@ -152,6 +156,16 @@ function App() {
       cancelled = true
     }
   }, [mergeDedupeProducts, showToast])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    void refreshOrderHistory()
+  }, [isAuthenticated, refreshOrderHistory])
+
+  useEffect(() => {
+    if (!isAuthenticated || screen !== 'orders') return
+    void refreshOrderHistory()
+  }, [screen, isAuthenticated, refreshOrderHistory])
 
   const loadMoreCatalogIfNeeded = useCallback(() => {
     if (!hasMoreCatalogItems) return
@@ -263,8 +277,7 @@ function App() {
         }))
       )
       setCartItems([])
-      const latestOrders = await getBackendOrders()
-      setOrderHistory(latestOrders)
+      await refreshOrderHistory()
       setScreen('orders')
       showToast('Order placed successfully and synced to admin.', { variant: 'success' })
     } catch (error) {
@@ -363,6 +376,7 @@ function App() {
           clearSignedIn()
           setIsAuthenticated(false)
           setCartItems([])
+          setOrderHistory([])
           setSearchQuery('')
           setSelectedCategory('All Items')
           setScreen('home')

@@ -617,6 +617,7 @@ adminRoutes.get('/deliveries', async (req, res, next) => {
     const query = z.object({}).passthrough().parse(req.query)
     const data = await listModule('/salesorders', { per_page: 200, ...query })
     const orders = Array.isArray(data.salesorders) ? data.salesorders : []
+    orders.sort((a, b) => (Date.parse(String(b?.date || '')) || 0) - (Date.parse(String(a?.date || '')) || 0))
     const stops = orders.map((order, index) => mapDeliveryStopFromSalesOrder(order, index))
     res.json({ deliveries: stops, salesorders: orders })
   } catch (error) {

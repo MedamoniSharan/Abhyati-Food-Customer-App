@@ -209,9 +209,10 @@ export async function getBackendOrders(): Promise<Order[]> {
   try {
     const response = await request<{ orders?: ZohoSalesOrder[] }>('/api/customer/orders?per_page=200')
     const salesOrders = Array.isArray(response.orders) ? response.orders : []
-    if (salesOrders.length === 0) return mockOrders
-    return salesOrders.map(mapZohoSalesOrderToOrder)
+    return salesOrders.map((row, i) => mapZohoSalesOrderToOrder(row, i))
   } catch {
+    // Signed-in users should see an empty list on failure, not demo orders.
+    if (readAuthToken()) return []
     return mockOrders
   }
 }
@@ -224,12 +225,17 @@ type CheckoutLineInput = {
   rate: number
 }
 
-export async function createCustomerOrder(lineItems: CheckoutLineInput[]): Promise<void> {
-  await request('/api/customer/orders', {
+export async function createCustomerOrder(lineItems: CheckoutLineInput[]): Promise<Order | null> {
+  const data = await request<{ order?: ZohoSalesOrder }>('/api/customer/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ line_items: lineItems })
   })
+  const raw = data.order
+  if (raw && typeof raw === 'object') {
+    return mapZohoSalesOrderToOrder(raw, 0)
+  }
+  return null
 }
 
 export async function downloadOrderProof(invoiceId: string): Promise<boolean> {
