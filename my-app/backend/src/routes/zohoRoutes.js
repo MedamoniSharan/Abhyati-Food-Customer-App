@@ -12,7 +12,6 @@ import {
   searchCustomerByEmail
 } from '../services/zohoBooksService.js'
 import { mapDeliveryStopFromSalesOrder } from '../services/zohoDeliveryMap.js'
-import { createInventoryAdjustmentsForDeliveredLines } from '../services/zohoInventoryPodService.js'
 
 const createCustomerSchema = z.object({
   contact_name: z.string().min(1),
@@ -231,11 +230,10 @@ zohoRoutes.post('/delivery/stops/:id/confirm', async (req, res, next) => {
       line_items: challanLines
     }
     const challan = await createModule('/deliverychallans', challanPayload)
-    const inv = await createInventoryAdjustmentsForDeliveredLines(lineItems, ref)
     res.status(201).json({
-      message: 'Delivery confirmed and synced to Zoho Books',
-      delivery_challan: challan.deliverychallan || challan,
-      inventory_adjustments: inv
+      message:
+        'Delivery confirmed and synced to Zoho Books. On-hand stock is reduced when the customer checks out (POST /api/customer/orders), not here.',
+      delivery_challan: challan.deliverychallan || challan
     })
   } catch (error) {
     next(error)

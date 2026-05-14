@@ -87,6 +87,14 @@ export async function adminFetch<T>(path: string, init: RequestInit = {}): Promi
   const data = parsed.data as Record<string, unknown>
   if (!res.ok) {
     let msg = typeof data.message === 'string' ? data.message : `Request failed (${res.status})`
+    const fieldErrors = data.errors
+    if (fieldErrors && typeof fieldErrors === 'object' && !Array.isArray(fieldErrors)) {
+      const parts: string[] = []
+      for (const [key, val] of Object.entries(fieldErrors as Record<string, unknown>)) {
+        if (Array.isArray(val) && val.length) parts.push(`${key}: ${val.filter((x) => typeof x === 'string').join(', ')}`)
+      }
+      if (parts.length) msg = `${msg} (${parts.join('; ')})`
+    }
     const zoho = data.zoho
     if (zoho && typeof zoho === 'object') {
       const z = zoho as Record<string, unknown>

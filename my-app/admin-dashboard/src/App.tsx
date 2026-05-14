@@ -1682,8 +1682,8 @@ export default function App() {
                 <code>.env</code>.
               </p>
               <p style={{ color: 'var(--admin-muted)' }}>
-                Set <code>ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID</code> for automatic stock updates on delivery
-                confirmation.
+                Set <code>ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID</code> so each customer checkout posts Zoho inventory
+                quantity adjustments (stock down) for lines that include a Zoho <code>item_id</code>.
               </p>
             </>
           ) : null}

@@ -2,12 +2,18 @@ import { createModule } from './zohoBooksService.js'
 import { env } from '../config/env.js'
 
 /**
- * After a delivery challan, reduce on-hand stock in Zoho Books for each line with item_id.
+ * Reduce on-hand stock in Zoho Books for each line with `item_id` (quantity adjustments).
+ * Used when a customer checks out; optional legacy delivery flows may pass a different `reasonTag`.
  * @param {Array<{ item_id?: string, quantity?: number }>} lineItems
- * @param {string} referenceLabel
+ * @param {string} referenceLabel invoice / order reference for Zoho adjustment notes
+ * @param {string} [reasonTag='Checkout'] label prefixed in the adjustment reason
  * @returns {{ created: unknown[], skipped: string[], errors: Array<{ item_id: string, message: string }> }}
  */
-export async function createInventoryAdjustmentsForDeliveredLines(lineItems, referenceLabel) {
+export async function createInventoryAdjustmentsForDeliveredLines(
+  lineItems,
+  referenceLabel,
+  reasonTag = 'Checkout'
+) {
   const accountId = env.ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID
   const result = { created: [], skipped: [], errors: [] }
 
@@ -25,7 +31,7 @@ export async function createInventoryAdjustmentsForDeliveredLines(lineItems, ref
     const itemId = String(item.item_id)
     const payload = {
       date: today,
-      reason: `Delivery POD — ${referenceLabel}`,
+      reason: `${reasonTag} — ${referenceLabel}`,
       adjustment_type: 'quantity',
       line_items: [
         {

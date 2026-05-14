@@ -10,6 +10,7 @@ import {
   getModuleById,
   listModule
 } from '../services/zohoBooksService.js'
+import { createInventoryAdjustmentsForDeliveredLines } from '../services/zohoInventoryPodService.js'
 
 const lineItemSchema = z.object({
   item_id: z.string().min(1).optional(),
@@ -154,11 +155,21 @@ customerRoutes.post('/orders', async (req, res, next) => {
 
     const invoice = invoiceData?.invoice || invoiceData
     const order = invoice ? mapInvoiceToOrder(invoice, null) : null
+    const refLabel =
+      String(
+        invoice?.invoice_number || invoice?.reference_number || body.reference_number || 'app-order'
+      ).trim() || 'app-order'
+    const inventory_adjustments = await createInventoryAdjustmentsForDeliveredLines(
+      body.line_items,
+      refLabel,
+      'Checkout'
+    )
 
     res.status(201).json({
       message: 'Order created',
       salesorder: salesOrderData?.salesorder || salesOrderData,
       invoice,
+      inventory_adjustments,
       ...(order ? { order } : {})
     })
   } catch (error) {

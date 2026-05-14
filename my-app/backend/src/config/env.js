@@ -1,7 +1,10 @@
 import dotenv from 'dotenv'
 import { z } from 'zod'
+import { createLogger } from '../util/logger.js'
 
 dotenv.config()
+
+const log = createLogger('config')
 
 const envSchema = z.object({
   NODE_ENV: z.string().default('development'),
@@ -28,15 +31,16 @@ const envSchema = z.object({
 
   DRIVER_ZOHO_CONTACT_TYPE: z.enum(['vendor', 'customer']).default('vendor'),
 
-  /** Chart account id for quantity inventory adjustments (POD stock sync) */
+  /** Chart account id for quantity inventory adjustments when customers check out */
   ZOHO_INVENTORY_ADJUSTMENT_ACCOUNT_ID: z.string().optional()
 })
 
 const parsed = envSchema.safeParse(process.env)
 
 if (!parsed.success) {
-  console.error('Invalid environment configuration')
-  console.error(parsed.error.flatten().fieldErrors)
+  log.error('Invalid environment configuration', {
+    fieldErrors: parsed.error.flatten().fieldErrors
+  })
   process.exit(1)
 }
 

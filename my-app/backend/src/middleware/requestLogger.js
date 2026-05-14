@@ -1,3 +1,7 @@
+import { createLogger } from '../util/logger.js'
+
+const log = createLogger('http')
+
 const COLORS = {
   reset: '\x1b[0m',
   dim: '\x1b[2m',
@@ -54,21 +58,38 @@ export function requestLogger(req, res, next) {
     const sc = statusColor(status)
     const timestamp = new Date().toLocaleTimeString('en-IN', { hour12: false })
 
-    let line = `${COLORS.dim}${timestamp}${COLORS.reset} ${mc}${method}${COLORS.reset} ${originalUrl} ${sc}${status}${COLORS.reset} ${COLORS.dim}${duration}ms${COLORS.reset}`
-    console.log(line)
+    const coloredLine = `${COLORS.dim}${timestamp}${COLORS.reset} ${mc}${method}${COLORS.reset} ${originalUrl} ${sc}${status}${COLORS.reset} ${COLORS.dim}${duration}ms${COLORS.reset}`
+    log.http('Request completed', {
+      method,
+      path: originalUrl,
+      status,
+      durationMs: duration,
+      terminalLine: coloredLine
+    })
 
     if (method !== 'GET' && req.body && Object.keys(req.body).length > 0) {
-      console.log(`  ${COLORS.dim}→ body:${COLORS.reset}`, JSON.stringify(sanitizeBody(req.body)))
+      log.debug('Request body', {
+        body: sanitizeBody(req.body),
+        terminalLine: `  ${COLORS.dim}→ body:${COLORS.reset} ${JSON.stringify(sanitizeBody(req.body))}`
+      })
     }
 
     if (responseBody) {
       const summary = JSON.stringify(responseBody)
       const truncated = summary.length > 300 ? summary.slice(0, 300) + '…' : summary
-      console.log(`  ${COLORS.dim}← resp:${COLORS.reset}`, truncated)
+      log.debug('Response body (truncated)', {
+        truncated,
+        terminalLine: `  ${COLORS.dim}← resp:${COLORS.reset} ${truncated}`
+      })
     }
 
     if (status >= 400 && responseBody?.message) {
-      console.log(`  ${COLORS.red}✗ ${responseBody.message}${COLORS.reset}`)
+      log.warn('Error response', {
+        status,
+        path: originalUrl,
+        message: responseBody.message,
+        terminalLine: `  ${COLORS.red}✗ ${responseBody.message}${COLORS.reset}`
+      })
     }
   })
 

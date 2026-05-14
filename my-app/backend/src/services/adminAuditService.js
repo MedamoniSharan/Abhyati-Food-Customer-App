@@ -1,6 +1,9 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createLogger, serializeError } from '../util/logger.js'
+
+const log = createLogger('audit')
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const AUDIT_FILE = join(__dirname, '..', '..', 'data', 'admin-audit.jsonl')
@@ -27,6 +30,6 @@ export function appendAdminAudit(entry) {
     })
     appendFileSync(AUDIT_FILE, `${line}\n`, 'utf8')
   } catch (err) {
-    console.error('[audit] failed to append', err)
+    log.error('Failed to append admin audit line', serializeError(err))
   }
 }

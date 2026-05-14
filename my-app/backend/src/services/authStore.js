@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { env } from '../config/env.js'
+import { createLogger, serializeError } from '../util/logger.js'
+
+const log = createLogger('auth')
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const AUTH_DATA_FILE = join(__dirname, '..', '..', 'data', 'auth-users.json')
@@ -50,9 +53,9 @@ function loadPersistedUsers() {
         createdAt: row.createdAt || new Date().toISOString()
       })
     }
-    console.log(`[auth] loaded ${usersByEmail.size} user(s) from disk`)
+    log.info('Loaded persisted users from disk', { count: usersByEmail.size })
   } catch (err) {
-    console.error('[auth] failed to load persisted users', err)
+    log.error('Failed to load persisted users', serializeError(err))
   }
 }
 
@@ -69,7 +72,7 @@ function persistUsers() {
     }))
     writeFileSync(AUTH_DATA_FILE, JSON.stringify(rows), 'utf8')
   } catch (err) {
-    console.error('[auth] failed to persist users', err)
+    log.error('Failed to persist users', serializeError(err))
   }
 }
 

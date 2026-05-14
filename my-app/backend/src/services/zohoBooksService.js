@@ -14,7 +14,19 @@ async function request(method, path, { params, data } = {}) {
     data
   })
 
-  return response.data
+  const body = response.data
+  // Zoho Books uses HTTP 2xx with a JSON `code` field: 0 = success, non-zero = error (see API "Response").
+  if (body && typeof body === 'object' && 'code' in body) {
+    const raw = body.code
+    const codeNum = typeof raw === 'number' ? raw : Number(raw)
+    if (Number.isFinite(codeNum) && codeNum !== 0) {
+      const err = new Error(body.message || `Zoho Books error (code ${codeNum})`)
+      err.statusCode = 400
+      throw err
+    }
+  }
+
+  return body
 }
 
 export async function getOrganizations() {

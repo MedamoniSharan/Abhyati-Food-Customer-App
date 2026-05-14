@@ -2,6 +2,9 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createLogger, serializeError } from '../util/logger.js'
+
+const log = createLogger('drivers')
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DRIVER_DATA_FILE = join(__dirname, '..', '..', 'data', 'driver-users.json')
@@ -54,9 +57,9 @@ function loadDrivers() {
         createdAt: row.createdAt || new Date().toISOString()
       })
     }
-    console.log(`[drivers] loaded ${driversByEmail.size} driver(s) from disk`)
+    log.info('Loaded drivers from disk', { count: driversByEmail.size })
   } catch (err) {
-    console.error('[drivers] failed to load', err)
+    log.error('Failed to load drivers', serializeError(err))
   }
 }
 
@@ -75,7 +78,7 @@ function persistDrivers() {
     }))
     writeFileSync(DRIVER_DATA_FILE, JSON.stringify(rows), 'utf8')
   } catch (err) {
-    console.error('[drivers] failed to persist', err)
+    log.error('Failed to persist drivers', serializeError(err))
   }
 }
 

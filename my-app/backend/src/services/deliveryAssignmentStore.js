@@ -1,6 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createLogger, serializeError } from '../util/logger.js'
+
+const log = createLogger('delivery')
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FILE = join(__dirname, '..', '..', 'data', 'delivery-assignments.json')
@@ -13,7 +16,7 @@ function persist() {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     writeFileSync(FILE, JSON.stringify([...assignments.values()]), 'utf8')
   } catch (err) {
-    console.error('[delivery] persist failed', err)
+    log.error('Assignment persist failed', serializeError(err))
   }
 }
 
@@ -27,7 +30,7 @@ function load() {
       assignments.set(String(row.id), row)
     }
   } catch (err) {
-    console.error('[delivery] load failed', err)
+    log.error('Assignment load failed', serializeError(err))
   }
 }
 
