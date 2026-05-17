@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 
 /**
- * Production backend (HTTPS). Override with VITE_API_BASE_URL for local dev in the browser.
+ * Deployed backend (HTTPS). Override with VITE_API_BASE_URL if needed.
  */
 export const PUBLIC_API_BASE_URL = 'https://abhyati-food-customer-app.onrender.com'
 
@@ -31,9 +31,7 @@ export function logApiCandidatesOnce(bases: string[]): void {
   }
 }
 
-/**
- * Bases to try in order. Native apps (Capacitor) use HTTPS only — no localhost fallbacks.
- */
+/** Bases to try in order. Native apps (Capacitor) require HTTPS. */
 export function getApiBaseCandidates(): string[] {
   const isNative = Capacitor.isNativePlatform()
   const fromEnv = trimBase(import.meta.env.VITE_API_BASE_URL || '')
@@ -55,11 +53,6 @@ export function getApiBaseCandidates(): string[] {
     push(fromEnv)
   }
   push(PUBLIC_API_BASE_URL)
-
-  if (!isNative) {
-    push('http://localhost:3001')
-    push('http://localhost:4000')
-  }
 
   return list
 }

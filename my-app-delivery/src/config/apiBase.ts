@@ -49,10 +49,5 @@ export function getApiBaseCandidates(): string[] {
   }
   push(PUBLIC_API_BASE_URL)
 
-  if (!isNative) {
-    push('http://localhost:3001')
-    push('http://localhost:4000')
-  }
-
   return list
 }
